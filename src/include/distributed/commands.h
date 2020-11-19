@@ -68,11 +68,8 @@ typedef enum ExtractForeignKeyConstraintsMode
 extern List * PreprocessClusterStmt(Node *node, const char *clusterCommand);
 
 /* index.c */
-<<<<<<< HEAD
 typedef void (*PGIndexProcessor)(Form_pg_index, List **);
-=======
-typedef void (*IndexProcesor)(Form_pg_index, List*);
->>>>>>> wip2
+
 
 /* call.c */
 extern bool CallDistributedProcedureRemotely(CallStmt *callStmt, DestReceiver *dest);
