@@ -181,7 +181,7 @@ static void ReorderTaskPlacementsByTaskAssignmentPolicy(Job *job,
 														TaskAssignmentPolicyType
 														taskAssignmentPolicy,
 														List *placementList);
-
+static bool IsLocalOrCitusLocalTable(Oid relationId);
 
 /*
  * CreateRouterPlan attempts to create a router executor plan for the given
@@ -534,7 +534,7 @@ ModifyPartialQuerySupported(Query *queryTree, bool multiShardQuery,
 	{
 		return deferredError;
 	}
-	
+
 	Var *partitionColumn = NULL;
 
 	if (IsCitusTable(distributedTableId))
@@ -773,6 +773,13 @@ ModifyPartialQuerySupported(Query *queryTree, bool multiShardQuery,
 	return NULL;
 }
 
+static bool IsLocalOrCitusLocalTable(Oid relationId) {
+	if (!IsCitusTable(relationId)) {
+		return true;
+	}
+	return IsCitusTableType(relationId, CITUS_LOCAL_TABLE);
+}
+
 
 /*
  * NodeIsFieldStore returns true if given Node is a FieldStore object.
@@ -958,8 +965,10 @@ ModifyQuerySupported(Query *queryTree, Query *originalQuery, bool multiShardQuer
 			/* for other kinds of relations, check if its distributed */
 			else
 			{
-				if (ContainsLocalTableDistributedTableJoin(queryTree->rtable))
-				{
+				if (IsLocalOrCitusLocalTable(rangeTableEntry->relid) &&
+				    ContainsLocalTableDistributedTableJoin(queryTree->rtable)
+					)
+				{ 
 					StringInfo errorMessage = makeStringInfo();
 					char *relationName = get_rel_name(rangeTableEntry->relid);
 
