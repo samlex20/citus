@@ -77,7 +77,6 @@ static List * RequiredAttrNumbersForRelation(RangeTblEntry *relationRte,
 static RTEToSubqueryConverterContext * CreateRTEToSubqueryConverterContext(RecursivePlanningContext *context,
 				List *rangeTableList);
 static void GetAllUniqueIndexes(Form_pg_index indexForm, List** uniqueIndexes);
-static bool ContainsLocalAndNonLocalTableJoin(RTEToSubqueryConverterContext* rteToSubqueryConverterContext);
 static RTEToSubqueryConverterReference* 
 	GetNextRTEToConvertToSubquery(FromExpr* joinTree, RTEToSubqueryConverterContext* rteToSubqueryConverterContext,
 		PlannerRestrictionContext *plannerRestrictionContext, RangeTblEntry* resultRelation);
@@ -225,16 +224,18 @@ static bool AutoConvertLocalTableJoinToSubquery(FromExpr* joinTree,
 	if (rteToSubqueryConverterReference == NULL) {
 		return false;
 	}
-	List* distRTEEqualityQuals = NIL;
-	FetchAttributeNumsForRTEFromQuals(joinTree->quals, rteToSubqueryConverterReference->rteIndex, &distRTEEqualityQuals);
+	List* distRTEEqualityQuals =
+		FetchAttributeNumsForRTEFromQuals(joinTree->quals, rteToSubqueryConverterReference->rteIndex);
+
 	Node* join = NULL;
 	foreach_ptr(join, joinTree->fromlist) {
 		if (IsA(join, JoinExpr)) {
 			JoinExpr* joinExpr = (JoinExpr*) join;
-			FetchAttributeNumsForRTEFromQuals(joinExpr->quals, rteToSubqueryConverterReference->rteIndex, &distRTEEqualityQuals);
+			distRTEEqualityQuals = list_concat(distRTEEqualityQuals, 
+				FetchAttributeNumsForRTEFromQuals(joinExpr->quals, rteToSubqueryConverterReference->rteIndex)
+			);
 		}
 	}
-	FetchAttributeNumsForRTEFromQuals(joinTree->quals, rteToSubqueryConverterReference->rteIndex, &distRTEEqualityQuals);
 
 	bool hasUniqueFilter = HasUniqueFilter(rteToSubqueryConverterReference->rangeTableEntry, 
 		rteToSubqueryConverterReference->restrictionList, distRTEEqualityQuals);	

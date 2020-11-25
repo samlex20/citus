@@ -3588,56 +3588,25 @@ NodeIsRangeTblRefReferenceTable(Node *node, List *rangeTableList)
 	return IsCitusTableType(rangeTableEntry->relid, REFERENCE_TABLE);
 }
 
-// List* FetchAttributeNumsForRTEFromQuals(Node* qualsNode, int RTEIndex) {
-// 	List* quals = make_ands_implicit((Expr*) qualsNode);
-// 	List* attributeNums = NIL;
-// 	Node *qual = NULL;
-// 	foreach_ptr(qual, quals)
-// 	{
-// 		if (!NodeIsEqualsOpExpr(qual))
-// 		{
-// 			continue;
-// 		}
-
-// 		OpExpr *nextJoinClauseOpExpr = castNode(OpExpr, qual);
-
-// 		Var *leftColumn = LeftColumnOrNULL(nextJoinClauseOpExpr);
-// 		Var *rightColumn = RightColumnOrNULL(nextJoinClauseOpExpr);
-
-// 		if (leftColumn && leftColumn->varno == RTEIndex) {
-// 			attributeNums = lappend_int(attributeNums, leftColumn->varattno);
-// 		}
-
-// 		if (rightColumn && rightColumn->varno == RTEIndex) {
-// 			attributeNums = lappend_int(attributeNums, rightColumn->varattno);
-// 		}
-// 	}
-// 	return attributeNums;
-// }
-
-void FetchAttributeNumsForRTEFromQuals(Node* quals, Index rteIndex, List** attributeNums) {
+List* FetchAttributeNumsForRTEFromQuals(Node* quals, Index rteIndex) {
+	List* attributeNums = NIL;
 	if (quals == NULL)
 	{
-		return;
+		return NIL;
 	}
 
 	if (IsA(quals, OpExpr))
 	{
 		if (!NodeIsEqualsOpExpr(quals))
 		{
-			return;
+			return NIL;
 		}
 		OpExpr *nextJoinClauseOpExpr = castNode(OpExpr, quals);
 
-		Var *leftColumn = LeftColumnOrNULL(nextJoinClauseOpExpr);
-		Var *rightColumn = RightColumnOrNULL(nextJoinClauseOpExpr);
-
-		if (leftColumn && leftColumn->varno == rteIndex) {
-			*attributeNums = lappend_int(*attributeNums, leftColumn->varattno);
-		}
-
-		if (rightColumn && rightColumn->varno == rteIndex) {
-			*attributeNums = lappend_int(*attributeNums, rightColumn->varattno);
+		Var* var = NULL;
+		if (VarConstOpExprClause(nextJoinClauseOpExpr, &var, NULL)) {
+			attributeNums = lappend_int(attributeNums, var->varattno);
+			return attributeNums;
 		}
 
 	}
@@ -3645,22 +3614,29 @@ void FetchAttributeNumsForRTEFromQuals(Node* quals, Index rteIndex, List** attri
 	{
 		BoolExpr *boolExpr = (BoolExpr *) quals;
 
-		/*
-		 * We do not descend into boolean expressions other than AND.
-		 * If the column filter appears in an OR clause, we do not
-		 * consider it even if it is logically the same as a single value
-		 * comparison (e.g. `<column> = <Const> OR false`)
-		 */
-		if (boolExpr->boolop != AND_EXPR)
-		{
-			return;
+		if (boolExpr->boolop != AND_EXPR && boolExpr->boolop != OR_EXPR) {
+			return attributeNums;
 		}
+
+		bool hasEquality = true;
 		Node* arg = NULL;
 		foreach_ptr(arg, boolExpr->args)
 		{
-			FetchAttributeNumsForRTEFromQuals(arg, rteIndex, attributeNums);
+			List* attributeNumsInSubExpression = FetchAttributeNumsForRTEFromQuals(arg, rteIndex);
+			if (boolExpr->boolop == AND_EXPR)
+			{
+				hasEquality |= list_length(attributeNumsInSubExpression) > 0;
+			}else if (boolExpr->boolop == OR_EXPR){
+				hasEquality &= list_length(attributeNumsInSubExpression) > 0;
+			}
+			attributeNums = list_concat(attributeNums, attributeNumsInSubExpression);
+			
+		}
+		if (hasEquality) {
+			return attributeNums;
 		}
 	}
+	return NIL;
 }
 
 /*
