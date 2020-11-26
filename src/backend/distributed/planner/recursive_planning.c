@@ -166,11 +166,11 @@ static bool AllDistributionKeysInSubqueryAreEqual(Query *subquery,
 static bool AllDataLocallyAccessible(List *rangeTableList);												  
 static bool ShouldRecursivelyPlanSetOperation(Query *query,
 											  RecursivePlanningContext *context);
+static void
+RecursivelyPlanSubquery(Query *subquery, RecursivePlanningContext *planningContext);											  
 static void RecursivelyPlanSetOperations(Query *query, Node *node,
 										 RecursivePlanningContext *context);
 static bool IsLocalTableRteOrMatView(Node *node);
-static void RecursivelyPlanSubquery(Query *subquery,
-									RecursivePlanningContext *planningContext);
 static DistributedSubPlan * CreateDistributedSubPlan(uint32 subPlanId,
 													 Query *subPlanQuery);
 static bool CteReferenceListWalker(Node *node, CteReferenceWalkerContext *context);
@@ -290,12 +290,6 @@ RecursivelyPlanSubqueriesAndCTEs(Query *query, RecursivePlanningContext *context
 	/* make sure function calls in joins are executed in the coordinator */
 	WrapFunctionsInSubqueries(query);
 
-	/*
-	 * Logical planner cannot handle "local_table" [OUTER] JOIN "dist_table", so we
-	 * recursively plan one side of the join so that the logical planner can plan.
-	 */
-	ConvertLocalTableJoinsToSubqueries(query, context);
-
 	/* descend into subqueries */
 	query_tree_walker(query, RecursivelyPlanSubqueryWalker, context, 0);
 
@@ -345,6 +339,12 @@ RecursivelyPlanSubqueriesAndCTEs(Query *query, RecursivePlanningContext *context
 	{
 		RecursivelyPlanNonColocatedSubqueries(query, context);
 	}
+
+	/*
+	 * Logical planner cannot handle "local_table" [OUTER] JOIN "dist_table", so we
+	 * recursively plan one side of the join so that the logical planner can plan.
+	 */
+	ConvertLocalTableJoinsToSubqueries(query, context);
 
 	return NULL;
 }
@@ -1352,7 +1352,7 @@ NodeContainsSubqueryReferencingOuterQuery(Node *node)
  */
 void
 ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrictionList,
-								  List *requiredAttrNumbers)
+								  List *requiredAttrNumbers, RecursivePlanningContext *context)
 {
 	Query *subquery = WrapRteRelationIntoSubquery(rangeTableEntry, requiredAttrNumbers);
 	Expr *andedBoundExpressions = make_ands_explicit(restrictionList);
@@ -1364,7 +1364,7 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
 	/* replace the function with the constructed subquery */
 	rangeTableEntry->rtekind = RTE_SUBQUERY;
 	rangeTableEntry->subquery = subquery;
-
+	RecursivelyPlanSubquery(rangeTableEntry->subquery, context);
 
 	/*
 	 * If the relation is inherited, it'll still be inherited as

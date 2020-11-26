@@ -294,6 +294,12 @@ CreateSingleTaskRouterSelectPlan(DistributedPlan *distributedPlan, Query *origin
 	distributedPlan->expectResults = true;
 }
 
+bool IsRouterPlannable(Query* query, PlannerRestrictionContext *plannerRestrictionContext) {
+	DeferredErrorMessage* deferrredErrorMessage = NULL;
+	RouterJob(query, plannerRestrictionContext,
+						 &deferrredErrorMessage);
+	return deferrredErrorMessage == NULL;						 
+}
 
 /*
  * ShardIntervalOpExpressions returns a list of OpExprs with exactly two

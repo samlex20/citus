@@ -62,7 +62,8 @@ extern bool GeneratingSubplans(void);
 extern bool ContainsLocalTableDistributedTableJoin(List *rangeTableList);
 extern void ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry,
 											  List *restrictionList,
-											  List *requiredAttrNumbers);
+											  List *requiredAttrNumbers,
+											  RecursivePlanningContext *context);
 extern bool
 ContainsLocalTableSubqueryJoin(List *rangeTableList, Oid resultRelationId);
 extern bool ContainsTableToBeConvertedToSubquery(List* rangeTableList, Oid resultRelationId);

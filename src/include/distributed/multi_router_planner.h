@@ -85,7 +85,7 @@ extern List * TargetShardIntervalForFastPathQuery(Query *query,
 extern void GenerateSingleShardRouterTaskList(Job *job,
 											  List *relationShardList,
 											  List *placementList, uint64 shardId);
-
+extern bool IsRouterPlannable(Query* query, PlannerRestrictionContext *plannerRestrictionContext);
 /*
  * FastPathPlanner is a subset of router planner, that's why we prefer to
  * keep the external function here.

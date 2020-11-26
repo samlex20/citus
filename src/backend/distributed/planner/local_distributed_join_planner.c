@@ -112,11 +112,14 @@ ConvertLocalTableJoinsToSubqueries(Query *query,
 	RTEToSubqueryConverterReference* rteToSubqueryConverterReference = 
 			GetNextRTEToConvertToSubquery(query->jointree, rteToSubqueryConverterContext,
 		 context->plannerRestrictionContext, resultRelation);
-	while (rteToSubqueryConverterReference)
+	
+	context->plannerRestrictionContext = FilterPlannerRestrictionForQuery(context->plannerRestrictionContext, query);
+	while (rteToSubqueryConverterReference && !IsRouterPlannable(query, context->plannerRestrictionContext))
 	{
 		ReplaceRTERelationWithRteSubquery(rteToSubqueryConverterReference->rangeTableEntry,
 									rteToSubqueryConverterReference->restrictionList,
-									rteToSubqueryConverterReference->requiredAttributeNumbers);
+									rteToSubqueryConverterReference->requiredAttributeNumbers,
+									context);							
 		rteToSubqueryConverterReference = 
 			GetNextRTEToConvertToSubquery(query->jointree, rteToSubqueryConverterContext,
 		 		context->plannerRestrictionContext, resultRelation);
