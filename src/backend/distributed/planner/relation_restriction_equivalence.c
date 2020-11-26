@@ -1808,7 +1808,7 @@ FilterPlannerRestrictionForQuery(PlannerRestrictionContext *plannerRestrictionCo
 		plannerRestrictionContext->relationRestrictionContext;
 	JoinRestrictionContext *joinRestrictionContext =
 		plannerRestrictionContext->joinRestrictionContext;
-
+		
 	RelationRestrictionContext *filteredRelationRestrictionContext =
 		FilterRelationRestrictionContext(relationRestrictionContext, queryRteIdentities);
 

@@ -295,10 +295,19 @@ CreateSingleTaskRouterSelectPlan(DistributedPlan *distributedPlan, Query *origin
 }
 
 bool IsRouterPlannable(Query* query, PlannerRestrictionContext *plannerRestrictionContext) {
-	DeferredErrorMessage* deferrredErrorMessage = NULL;
-	RouterJob(query, plannerRestrictionContext,
-						 &deferrredErrorMessage);
-	return deferrredErrorMessage == NULL;						 
+	/* copy the query as the following methods can change the underlying query */
+	Query* copyQuery = copyObject(query);
+	DeferredErrorMessage* deferredErrorMessage = NULL;
+	if (copyQuery->commandType == CMD_SELECT) {
+		deferredErrorMessage = MultiRouterPlannableQuery(copyQuery);
+	}
+	if (deferredErrorMessage) {
+		return false;
+	}
+	/* TODO:: we might not need this copy*/
+	copyQuery = copyObject(query);
+	RouterJob(copyQuery, plannerRestrictionContext, &deferredErrorMessage);
+	return deferredErrorMessage == NULL;						 
 }
 
 /*
@@ -989,7 +998,6 @@ bool fastPathRouterQuery =
 						appendStringInfo(errorMessage, "relation %s is not distributed",
 									 relationName);
 					}
-
 					return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
 										 errorMessage->data, NULL, NULL);
 				}

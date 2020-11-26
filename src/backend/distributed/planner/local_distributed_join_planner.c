@@ -80,8 +80,10 @@ static void GetAllUniqueIndexes(Form_pg_index indexForm, List** uniqueIndexes);
 static RTEToSubqueryConverterReference* 
 	GetNextRTEToConvertToSubquery(FromExpr* joinTree, RTEToSubqueryConverterContext* rteToSubqueryConverterContext,
 		PlannerRestrictionContext *plannerRestrictionContext, RangeTblEntry* resultRelation);
+static void GetRangeTableEntriesFromJoinTree(Node *joinNode, List* rangeTableList, List** joinRangeTableEntries);		
 static void PopFromRTEToSubqueryConverterContext(RTEToSubqueryConverterContext* rteToSubqueryConverterContext,
-	bool isCitusLocalTable);		
+	bool isCitusLocalTable);
+			
 /*
  * ConvertLocalTableJoinsToSubqueries gets a query and the planner
  * restrictions. As long as there is a join between a local table
@@ -96,7 +98,8 @@ void
 ConvertLocalTableJoinsToSubqueries(Query *query,
 								   RecursivePlanningContext *context)
 {
-	List *rangeTableList = query->rtable;
+	List* rangeTableList = NIL; 
+	GetRangeTableEntriesFromJoinTree((Node *) query->jointree, query->rtable, &rangeTableList);
 	RangeTblEntry *resultRelation = ExtractResultRelationRTE(query);
 	Oid resultRelationId = InvalidOid;
 	if (resultRelation) {
@@ -113,8 +116,8 @@ ConvertLocalTableJoinsToSubqueries(Query *query,
 			GetNextRTEToConvertToSubquery(query->jointree, rteToSubqueryConverterContext,
 		 context->plannerRestrictionContext, resultRelation);
 	
-	context->plannerRestrictionContext = FilterPlannerRestrictionForQuery(context->plannerRestrictionContext, query);
-	while (rteToSubqueryConverterReference && !IsRouterPlannable(query, context->plannerRestrictionContext))
+	PlannerRestrictionContext* plannerRestrictionContext= FilterPlannerRestrictionForQuery(context->plannerRestrictionContext, query);
+	while (rteToSubqueryConverterReference && !IsRouterPlannable(query, plannerRestrictionContext))
 	{
 		ReplaceRTERelationWithRteSubquery(rteToSubqueryConverterReference->rangeTableEntry,
 									rteToSubqueryConverterReference->restrictionList,
@@ -123,6 +126,43 @@ ConvertLocalTableJoinsToSubqueries(Query *query,
 		rteToSubqueryConverterReference = 
 			GetNextRTEToConvertToSubquery(query->jointree, rteToSubqueryConverterContext,
 		 		context->plannerRestrictionContext, resultRelation);
+	}
+}
+
+/*
+ * GetRangeTableEntriesFromJoinTree gets the range table entries that are 
+ * on the given join tree.
+ */
+static void GetRangeTableEntriesFromJoinTree(Node *joinNode, List* rangeTableList, List** joinRangeTableEntries) {
+	if (joinNode == NULL)
+	{
+		return;
+	}
+	else if (IsA(joinNode, FromExpr))
+	{
+		FromExpr *fromExpr = (FromExpr *) joinNode;
+		Node *fromElement;
+
+		foreach_ptr(fromElement, fromExpr->fromlist)
+		{
+			GetRangeTableEntriesFromJoinTree(fromElement, rangeTableList, joinRangeTableEntries);
+		}
+	}
+	else if (IsA(joinNode, JoinExpr))
+	{
+		JoinExpr *joinExpr = (JoinExpr *) joinNode;
+		GetRangeTableEntriesFromJoinTree (joinExpr->larg, rangeTableList, joinRangeTableEntries);
+		GetRangeTableEntriesFromJoinTree (joinExpr->rarg, rangeTableList, joinRangeTableEntries);
+	}
+	else if (IsA(joinNode, RangeTblRef))
+	{
+		int rangeTableIndex = ((RangeTblRef *) joinNode)->rtindex;
+		RangeTblEntry *rte = rt_fetch(rangeTableIndex, rangeTableList);
+	    *joinRangeTableEntries = lappend(*joinRangeTableEntries, rte);
+	}
+	else
+	{
+		pg_unreachable();
 	}
 }
 
