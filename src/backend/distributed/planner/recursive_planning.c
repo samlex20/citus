@@ -1364,7 +1364,6 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
 	/* replace the function with the constructed subquery */
 	rangeTableEntry->rtekind = RTE_SUBQUERY;
 	rangeTableEntry->subquery = subquery;
-	RecursivelyPlanSubquery(rangeTableEntry->subquery, context);
 
 	/*
 	 * If the relation is inherited, it'll still be inherited as
@@ -1383,6 +1382,8 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
 								get_rel_name(rangeTableEntry->relid),
 								ApplyLogRedaction(subqueryString->data))));
 	}
+	RecursivelyPlanSubquery(rangeTableEntry->subquery, context);
+
 }
 
 bool ContainsTableToBeConvertedToSubquery(List* rangeTableList, Oid resultRelationId) {
