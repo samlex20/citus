@@ -3604,7 +3604,7 @@ List* FetchAttributeNumsForRTEFromQuals(Node* quals, Index rteIndex) {
 		OpExpr *nextJoinClauseOpExpr = castNode(OpExpr, quals);
 
 		Var* var = NULL;
-		if (VarConstOpExprClause(nextJoinClauseOpExpr, &var, NULL)) {
+		if (VarConstOpExprClause(nextJoinClauseOpExpr, &var, NULL) && var->varno == rteIndex) {
 			attributeNums = lappend_int(attributeNums, var->varattno);
 			return attributeNums;
 		}

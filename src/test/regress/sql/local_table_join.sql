@@ -80,6 +80,9 @@ SELECT count(*) FROM postgres_table JOIN distributed_table_pkey ON distributed_t
 SELECT count(*) FROM postgres_table JOIN distributed_table_pkey ON distributed_table_pkey.key = 10 OR (distributed_table_pkey.key > 10 and distributed_table_pkey.value = 'notext');
 SELECT count(*) FROM postgres_table JOIN distributed_table_pkey ON distributed_table_pkey.key = 10 OR (distributed_table_pkey.key = 10 and distributed_table_pkey.value = 'notext');
 
+SELECT count(*) FROM postgres_table JOIN distributed_table_pkey ON postgres_table.key = 10;
+
+
 SELECT count(*) FROM postgres_table JOIN (SELECT * FROM distributed_table) d1 USING(key);
 -- since this is already router plannable, we don't recursively plan the postgres table
 SELECT count(*) FROM postgres_table JOIN (SELECT * FROM distributed_table LIMIT 1) d1 USING(key);
