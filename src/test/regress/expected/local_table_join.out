@@ -931,8 +931,6 @@ DEBUG:  Plan XXX query after replacing subqueries and CTEs: SELECT count(*) AS c
 DROP TABLE citus_local;
 CONTEXT:  SQL statement "SELECT master_drop_all_shards(v_obj.objid, v_obj.schema_name, v_obj.object_name)"
 PL/pgSQL function citus_drop_trigger() line 15 at PERFORM
-CONTEXT:  SQL statement "SELECT master_drop_all_shards(v_obj.objid, v_obj.schema_name, v_obj.object_name)"
-PL/pgSQL function citus_drop_trigger() line 15 at PERFORM
 RESET client_min_messages;
 SELECT master_remove_node('localhost', :master_port);
  master_remove_node
