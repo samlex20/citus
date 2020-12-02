@@ -688,12 +688,12 @@ NOTICE:  executing the command locally: UPDATE citus_local_table_queries.citus_l
 DELETE FROM postgres_local_table
 USING citus_local_table
 WHERE citus_local_table.b = postgres_local_table.b;
-ERROR:  relation postgres_local_table is not distributed
+NOTICE:  executing the command locally: DELETE FROM citus_local_table_queries.postgres_local_table USING citus_local_table_queries.citus_local_table_1509000 citus_local_table WHERE (citus_local_table.b OPERATOR(pg_catalog.=) postgres_local_table.b)
 UPDATE postgres_local_table
 SET b = 5
 FROM citus_local_table
 WHERE citus_local_table.a = 3 AND citus_local_table.b = postgres_local_table.b;
-ERROR:  relation postgres_local_table is not distributed
+NOTICE:  executing the command locally: UPDATE citus_local_table_queries.postgres_local_table SET b = 5 FROM citus_local_table_queries.citus_local_table_1509000 citus_local_table WHERE ((citus_local_table.a OPERATOR(pg_catalog.=) 3) AND (citus_local_table.b OPERATOR(pg_catalog.=) postgres_local_table.b))
 -- no direct joins supported
 UPDATE distributed_table
 SET b = 6

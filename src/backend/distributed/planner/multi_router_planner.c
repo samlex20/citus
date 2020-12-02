@@ -1941,8 +1941,10 @@ SingleShardTaskList(Query *query, uint64 jobId, List *relationShardList,
 		Assert(updateOrDeleteRTE != NULL);
 
 		CitusTableCacheEntry *modificationTableCacheEntry = NULL;
-		if (IsCitusTable(updateOrDeleteRTE->relid)) {
-			modificationTableCacheEntry = GetCitusTableCacheEntry(updateOrDeleteRTE->relid);
+		if (IsCitusTable(updateOrDeleteRTE->relid))
+		{
+			modificationTableCacheEntry = GetCitusTableCacheEntry(
+				updateOrDeleteRTE->relid);
 		}
 
 		if (IsCitusTableType(updateOrDeleteRTE->relid, REFERENCE_TABLE) &&
@@ -1954,7 +1956,8 @@ SingleShardTaskList(Query *query, uint64 jobId, List *relationShardList,
 		}
 
 		taskType = MODIFY_TASK;
-		if (modificationTableCacheEntry) {
+		if (modificationTableCacheEntry)
+		{
 			replicationModel = modificationTableCacheEntry->replicationModel;
 		}
 	}

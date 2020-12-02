@@ -1384,7 +1384,7 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
 		pg_get_query_def(subquery,
 						 subqueryString);
 
-		ereport(DEBUG1, (errmsg("Wrapping local relation \"%s\" to a subquery: %s ",
+		ereport(DEBUG1, (errmsg("Wrapping relation \"%s\" to a subquery: %s ",
 								get_rel_name(rangeTableEntry->relid),
 								ApplyLogRedaction(subqueryString->data))));
 	}
@@ -1455,6 +1455,7 @@ ContainsTableToBeConvertedToSubquery(List *rangeTableList, Oid resultRelationId)
 	}
 	return false;
 }
+
 
 /*
  * AllDataLocallyAccessible return true if all data for the relations in the
