@@ -6,3 +6,5 @@
 #include "../../../columnar/sql/downgrades/columnar--10.0-1--9.5-1.sql"
 
 DROP VIEW public.citus_tables;
+
+DROP FUNCTION pg_catalog.alter_distributed_table(table_name regclass, distribution_column text DEFAULT NULL, shard_count int default NULL, colocate_with text DEFAULT 'default', cascade_to_colocated boolean DEFAULT NULL);

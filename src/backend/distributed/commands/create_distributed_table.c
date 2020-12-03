@@ -88,6 +88,7 @@
 
 /* Table Conversion Types */
 #define UNDISTRIBUTE_TABLE 'u'
+#define ALTER_DISTRIBUTED_TABLE 'a'
 
 /* Replication model to use when creating distributed tables */
 int ReplicationModel = REPLICATION_MODEL_COORDINATOR;
@@ -133,15 +134,17 @@ static void DoCopyFromLocalTableIntoShards(Relation distributedRelation,
 										   TupleTableSlot *slot,
 										   EState *estate);
 static void UndistributeTable(Oid relationId);
+static void AlterDistributedTable(Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, bool cascadeToColocated);
 static List * GetViewCreationCommandsOfTable(Oid relationId);
 static void ReplaceTable(Oid sourceId, Oid targetId);
-static void ConvertTable(char conversionType, Oid relationId);
+static void ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, bool cascadeToColocated);
 
 /* exports for SQL callable functions */
 PG_FUNCTION_INFO_V1(master_create_distributed_table);
 PG_FUNCTION_INFO_V1(create_distributed_table);
 PG_FUNCTION_INFO_V1(create_reference_table);
 PG_FUNCTION_INFO_V1(undistribute_table);
+PG_FUNCTION_INFO_V1(alter_distributed_table);
 
 
 /*
@@ -305,6 +308,45 @@ undistribute_table(PG_FUNCTION_ARGS)
 	EnsureTableOwner(relationId);
 
 	UndistributeTable(relationId);
+
+	PG_RETURN_VOID();
+}
+
+
+/*
+ * alter_distributed_table gets a distributed table and some other
+ * parameters and alters some properties of the table according to
+ * the parameters.
+ */
+Datum
+alter_distributed_table(PG_FUNCTION_ARGS)
+{
+	Oid relationId = PG_GETARG_OID(0);
+	
+	char *distributionColumn = NULL;
+	if (!PG_ARGISNULL(1))
+	{
+		text *distributionColumnText = PG_GETARG_TEXT_P(1);
+		distributionColumn = text_to_cstring(distributionColumnText);
+	}
+
+	int shardCount = 0;
+	if (!PG_ARGISNULL(2))
+	{
+		shardCount = PG_GETARG_INT32(2);
+	}
+
+	text *colocateWithText = PG_GETARG_TEXT_P(3);
+	char *colocateWith = text_to_cstring(colocateWithText);
+
+	bool cascadeToColocated = PG_GETARG_BOOL(4);
+
+	CheckCitusVersion(ERROR);
+	EnsureCoordinator();
+	EnsureRelationExists(relationId);
+	EnsureTableOwner(relationId);
+
+	AlterDistributedTable(relationId, distributionColumn, shardCount, colocateWith, cascadeToColocated);
 
 	PG_RETURN_VOID();
 }
@@ -1622,8 +1664,13 @@ DistributionColumnUsesGeneratedStoredColumn(TupleDesc relationDesc,
  * be dropped.
  */
 void
-ConvertTable(char conversionType, Oid relationId)
+ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, bool cascadeToColocated)
 {
+	List *colocatedTableList = NIL;
+	if (cascadeToColocated)
+	{
+		colocatedTableList = ColocatedTableList(relationId);
+	}
 	List *preLoadCommands = GetPreLoadTableCreationCommands(relationId, true);
 	List *postLoadCommands = GetPostLoadTableCreationCommands(relationId);
 
@@ -1668,6 +1715,11 @@ ConvertTable(char conversionType, Oid relationId)
 			{
 				UndistributeTable(partitionRelationId);
 			}
+			else if (conversionType == ALTER_DISTRIBUTED_TABLE)
+			{
+				AlterDistributedTable(partitionRelationId, NULL, shardCount, NULL, false);
+			}
+		}
 	}
 
 	char *tempName = pstrdup(relationName);
@@ -1691,6 +1743,25 @@ ConvertTable(char conversionType, Oid relationId)
 							NULL, None_Receiver, NULL);
 	}
 
+	if (conversionType == ALTER_DISTRIBUTED_TABLE)
+	{
+		Var *distributionKey = NULL;
+
+		if (distributionColumn)
+		{
+			Relation relation = try_relation_open(relationId, ExclusiveLock);
+			relation_close(relation, NoLock);
+			distributionKey = BuildDistributionKeyFromColumnName(relation,
+																 distributionColumn);
+		}
+		else
+		{
+			distributionKey = DistPartitionKey(relationId);
+		}
+
+		CreateDistributedTable(get_relname_relid(tempName, schemaId), distributionKey, DISTRIBUTE_BY_HASH, shardCount, colocateWithTableName, false);
+	}
+
 	ReplaceTable(relationId, get_relname_relid(tempName, schemaId));
 
 	TableDDLCommand *tableConstructionCommand = NULL;
@@ -1709,6 +1780,24 @@ ConvertTable(char conversionType, Oid relationId)
 	if (spiResult != SPI_OK_FINISH)
 	{
 		ereport(ERROR, (errmsg("could not finish SPI connection")));
+	}
+	
+	if (cascadeToColocated)
+	{
+		Oid colocatedTableId = InvalidOid;
+		// For now we only support cascade to colocation for alter_distributed_table UDF
+		Assert(conversionType == ALTER_DISTRIBUTED_TABLE);
+		foreach_oid(colocatedTableId, colocatedTableList)
+		{
+			if (colocatedTableId == relationId)
+			{
+				continue;
+			}
+			if (conversionType == ALTER_DISTRIBUTED_TABLE)
+			{
+				AlterDistributedTable(colocatedTableId, NULL, shardCount, relationName, false);
+			}
+		}
 	}
 }
 
@@ -1743,7 +1832,41 @@ UndistributeTable(Oid relationId)
 	EnsureTableNotForeign(relationId);
 	EnsureTableNotPartition(relationId);
 
-	ConvertTable(UNDISTRIBUTE_TABLE, relationId);
+	ConvertTable(UNDISTRIBUTE_TABLE, relationId, NULL, 0, NULL, false);
+}
+
+
+/*
+ * AlterDistributedTable changes some properties of the given table. It uses
+ * ConvertTable function to create a new local table and move everything to that table.
+ * 
+ * The local and reference tables, tables with references, partition tables and foreign
+ * tables are not supported. The function gives errors in these cases.
+ */
+void
+AlterDistributedTable(Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, bool cascadeToColocated)
+{
+	Relation relation = try_relation_open(relationId, ExclusiveLock);
+
+	if (relation == NULL)
+	{
+		ereport(ERROR, (errmsg("cannot undistribute table "
+							   "because no such distributed table exists")));
+	}
+	relation_close(relation, NoLock);
+
+	if (!IsCitusTableType(relationId, DISTRIBUTED_TABLE))
+	{
+		ereport(ERROR, (errmsg("cannot undistribute table "
+							   "because the table is not distributed")));
+	}
+
+	EnsureTableNotReferencing(relationId);
+	EnsureTableNotReferenced(relationId);
+	EnsureTableNotForeign(relationId);
+	EnsureTableNotPartition(relationId);
+
+	ConvertTable(ALTER_DISTRIBUTED_TABLE, relationId, distributionColumn, shardCount, colocateWithTableName, cascadeToColocated);
 }
 
 
