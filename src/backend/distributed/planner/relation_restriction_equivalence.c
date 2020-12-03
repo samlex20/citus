@@ -37,7 +37,6 @@
 #include "parser/parsetree.h"
 #include "optimizer/pathnode.h"
 
-#define SINGLE_RTE_INDEX 1
 static uint32 attributeEquivalenceId = 1;
 
 

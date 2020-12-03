@@ -179,7 +179,7 @@ static Query * BuildReadIntermediateResultsQuery(List *targetEntryList,
 												 List *columnAliasList,
 												 Const *resultIdConst, Oid functionOid,
 												 bool useBinaryCopyFormat);
-static void UpdateVarNosInQualForSubquery(Node *node);
+static void UpdateVarNosInQualForSubquery(Query *query);
 static bool ModifiesLocalTableWithRemoteCitusLocalTable(List *rangeTableList, Oid
 														resultRelationId);
 static bool ContainsOnlyReferenceAndCitusLocalRelation(List *rangeTableList);
@@ -1371,7 +1371,7 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
 	Query *subquery = WrapRteRelationIntoSubquery(rangeTableEntry, requiredAttrNumbers);
 	Expr *andedBoundExpressions = make_ands_explicit(restrictionList);
 	subquery->jointree->quals = (Node *) andedBoundExpressions;
-	UpdateVarNosInQualForSubquery(subquery->jointree->quals);
+	UpdateVarNosInQualForSubquery(subquery);
 
 	/* force recursively planning of the newly created subquery */
 	subquery->limitOffset = (Node *) MakeIntegerConst(0);
@@ -1408,38 +1408,14 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
  * will be only one RTE in rtable, which is the subquery.
  */
 static void
-UpdateVarNosInQualForSubquery(Node *node)
+UpdateVarNosInQualForSubquery(Query *query)
 {
-	if (node == NULL)
+	List *varList = pull_var_clause(query->jointree->quals, PVC_RECURSE_AGGREGATES |
+									PVC_RECURSE_PLACEHOLDERS);
+	Var *var = NULL;
+	foreach_ptr(var, varList)
 	{
-		return;
-	}
-
-	if (IsA(node, Var))
-	{
-		Var *var = (Var *) node;
-
-		/* we update the varno as 1 as there is only one subquery */
-		var->varno = 1;
-	}
-	else if (IsA(node, OpExpr))
-	{
-		OpExpr *opExpr = (OpExpr *) node;
-		Var *leftColumn = LeftColumnOrNULL(opExpr);
-		Var *rightColumn = RightColumnOrNULL(opExpr);
-		UpdateVarNosInQualForSubquery((Node *) leftColumn);
-		UpdateVarNosInQualForSubquery((Node *) rightColumn);
-	}
-	else if (IsA(node, BoolExpr))
-	{
-		BoolExpr *boolExpr = (BoolExpr *) node;
-		List *argumentList = boolExpr->args;
-
-		Node *arg = NULL;
-		foreach_ptr(arg, argumentList)
-		{
-			UpdateVarNosInQualForSubquery(arg);
-		}
+		var->varno = SINGLE_RTE_INDEX;
 	}
 }
 
