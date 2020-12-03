@@ -272,7 +272,7 @@ AllRangeTableEntriesHaveUniqueIndex(List *rangeTableEntryDetailsList)
 static void
 RemoveFromConversionCandidates(ConversionCandidates *conversionCandidates, Oid relationId)
 {
-	if (IsLocalOrCitusLocalTable(relationId))
+	if (IsRelationLocalTableOrMatView(relationId))
 	{
 		conversionCandidates->localTableList =
 			list_delete_first(conversionCandidates->localTableList);

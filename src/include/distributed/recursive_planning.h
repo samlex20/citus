@@ -68,5 +68,5 @@ extern bool ContainsLocalTableSubqueryJoin(List *rangeTableList, Oid resultRelat
 extern bool ContainsTableToBeConvertedToSubquery(List *rangeTableList, Oid
 												 resultRelationId);
 extern bool IsRecursivelyPlannableRelation(RangeTblEntry *rangeTableEntry);
-
+extern bool IsRelationLocalTableOrMatView(Oid relationId);
 #endif /* RECURSIVE_PLANNING_H */

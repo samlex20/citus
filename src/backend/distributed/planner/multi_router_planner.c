@@ -310,6 +310,16 @@ IsRouterPlannable(Query *query, PlannerRestrictionContext *plannerRestrictionCon
 		return false;
 	}
 
+	if (IsModifyCommand(query))
+	{
+		deferredErrorMessage = ModifyQuerySupported(copyQuery, copyQuery, false,
+													plannerRestrictionContext);
+		if (deferredErrorMessage)
+		{
+			return false;
+		}
+	}
+
 	/* TODO:: we might not need this copy*/
 	copyQuery = copyObject(query);
 	RouterJob(copyQuery, plannerRestrictionContext, &deferredErrorMessage);
@@ -896,7 +906,7 @@ ModifyQuerySupported(Query *queryTree, Query *originalQuery, bool multiShardQuer
 			/* for other kinds of relations, check if its distributed */
 			else
 			{
-				if (IsLocalOrCitusLocalTable(rangeTableEntry->relid) &&
+				if (IsRelationLocalTableOrMatView(rangeTableEntry->relid) &&
 					containsTableToBeConvertedToSubquery)
 				{
 					StringInfo errorMessage = makeStringInfo();

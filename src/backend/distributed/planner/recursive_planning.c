@@ -164,6 +164,7 @@ static bool AllDistributionKeysInSubqueryAreEqual(Query *subquery,
 												  PlannerRestrictionContext *
 												  restrictionContext);
 static bool AllDataLocallyAccessible(List *rangeTableList);
+static bool IsTableLocallyAccessible(Oid relationId);
 static bool ShouldRecursivelyPlanSetOperation(Query *query,
 											  RecursivePlanningContext *context);
 static void RecursivelyPlanSubquery(Query *subquery,
@@ -186,6 +187,9 @@ static Query * BuildReadIntermediateResultsQuery(List *targetEntryList,
 												 Const *resultIdConst, Oid functionOid,
 												 bool useBinaryCopyFormat);
 static void UpdateVarNosInQualForSubquery(Node *node);
+static bool ModifiesLocalTableWithRemoteCitusLocalTable(List *rangeTableList, Oid
+														resultRelationId);
+static bool ContainsOnlyReferenceAndCitusLocalRelation(List *rangeTableList);
 
 /*
  * GenerateSubplansForSubqueriesAndCTEs is a wrapper around RecursivelyPlanSubqueriesAndCTEs.
@@ -1087,6 +1091,17 @@ IsLocalTableRteOrMatView(Node *node)
 	}
 
 	Oid relationId = rangeTableEntry->relid;
+	return IsRelationLocalTableOrMatView(relationId);
+}
+
+
+/*
+ * IsRelationLocalTableOrMatView returns true if the given relation
+ * is a citus local, local, or materialized view.
+ */
+bool
+IsRelationLocalTableOrMatView(Oid relationId)
+{
 	if (!IsCitusTable(relationId))
 	{
 		/* postgres local table or a materialized view */
@@ -1445,6 +1460,10 @@ ContainsTableToBeConvertedToSubquery(List *rangeTableList, Oid resultRelationId)
 	{
 		return false;
 	}
+	if (ContainsOnlyReferenceAndCitusLocalRelation(rangeTableList))
+	{
+		return false;
+	}
 	if (ContainsLocalTableDistributedTableJoin(rangeTableList))
 	{
 		return true;
@@ -1453,7 +1472,45 @@ ContainsTableToBeConvertedToSubquery(List *rangeTableList, Oid resultRelationId)
 	{
 		return true;
 	}
+	if (ModifiesLocalTableWithRemoteCitusLocalTable(rangeTableList, resultRelationId))
+	{
+		return true;
+	}
 	return false;
+}
+
+
+/*
+ * ModifiesLocalTableWithRemoteCitusLocalTable returns true if a local
+ * table is modified with a remote citus local table. This could be a case with
+ * MX structure.
+ */
+static bool
+ModifiesLocalTableWithRemoteCitusLocalTable(List *rangeTableList, Oid resultRelationId)
+{
+	bool containsLocalResultRelation = false;
+	bool containsRemoteCitusLocalTable = false;
+
+	RangeTblEntry *rangeTableEntry = NULL;
+	foreach_ptr(rangeTableEntry, rangeTableList)
+	{
+		if (!IsRecursivelyPlannableRelation(rangeTableEntry))
+		{
+			continue;
+		}
+		if (IsCitusTableType(rangeTableEntry->relid, CITUS_LOCAL_TABLE))
+		{
+			if (!IsTableLocallyAccessible(rangeTableEntry->relid))
+			{
+				containsRemoteCitusLocalTable = true;
+			}
+		}
+		else if (!IsCitusTable(rangeTableEntry->relid))
+		{
+			containsLocalResultRelation = true;
+		}
+	}
+	return containsLocalResultRelation && containsRemoteCitusLocalTable;
 }
 
 
@@ -1477,34 +1534,46 @@ AllDataLocallyAccessible(List *rangeTableList)
 			continue;
 		}
 
-
 		Oid relationId = rangeTableEntry->relid;
-
-		if (!IsCitusTable(relationId))
+		if (!IsTableLocallyAccessible(relationId))
 		{
-			/* local tables are locally accessible */
-			continue;
-		}
-
-		List *shardIntervalList = LoadShardIntervalList(relationId);
-		if (list_length(shardIntervalList) != 1)
-		{
-			/* we currently only consider single placement tables */
-			return false;
-		}
-
-		ShardInterval *shardInterval = linitial(shardIntervalList);
-		uint64 shardId = shardInterval->shardId;
-		ShardPlacement *localShardPlacement =
-			ShardPlacementOnGroup(shardId, GetLocalGroupId());
-		if (localShardPlacement == NULL)
-		{
-			/* the table doesn't have a placement on this node */
 			return false;
 		}
 	}
 
 	return true;
+}
+
+
+/*
+ * IsTableLocallyAccessible returns true if the given table
+ * can be accessed in local.
+ */
+static bool
+IsTableLocallyAccessible(Oid relationId)
+{
+	if (!IsCitusTable(relationId))
+	{
+		/* local tables are locally accessible */
+		return true;
+	}
+
+	List *shardIntervalList = LoadShardIntervalList(relationId);
+	if (list_length(shardIntervalList) != 1)
+	{
+		return false;
+	}
+
+	ShardInterval *shardInterval = linitial(shardIntervalList);
+	uint64 shardId = shardInterval->shardId;
+	ShardPlacement *localShardPlacement =
+		ShardPlacementOnGroup(shardId, GetLocalGroupId());
+	if (localShardPlacement != NULL)
+	{
+		/* the table has a placement on this node */
+		return true;
+	}
+	return false;
 }
 
 
@@ -1559,6 +1628,32 @@ ContainsLocalTableDistributedTableJoin(List *rangeTableList)
 	}
 
 	return containsLocalTable && containsDistributedTable;
+}
+
+
+/*
+ * ContainsOnlyReferenceAndCitusLocalRelation returns true if there is no
+ * relation other than citus local and reference tables
+ */
+static bool
+ContainsOnlyReferenceAndCitusLocalRelation(List *rangeTableList)
+{
+	RangeTblEntry *rangeTableEntry = NULL;
+	foreach_ptr(rangeTableEntry, rangeTableList)
+	{
+		if (!IsRecursivelyPlannableRelation(rangeTableEntry))
+		{
+			continue;
+		}
+
+		if (!IsCitusTableType(rangeTableEntry->relid, REFERENCE_TABLE) &&
+			!IsCitusTableType(rangeTableEntry->relid, CITUS_LOCAL_TABLE))
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 
