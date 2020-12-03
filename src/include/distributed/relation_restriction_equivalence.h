@@ -38,7 +38,7 @@ extern PlannerRestrictionContext * FilterPlannerRestrictionForQuery(
 	Query *query);
 extern List * GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
 											 PlannerRestrictionContext *
-											 plannerRestrictionContext, int rteIndex);
+											 plannerRestrictionContext);
 extern JoinRestrictionContext * RemoveDuplicateJoinRestrictions(JoinRestrictionContext *
 																joinRestrictionContext);
 

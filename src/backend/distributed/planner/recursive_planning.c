@@ -100,13 +100,6 @@
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 
-
-/*
- * Managed via a GUC
- */
-int LocalTableJoinPolicy = LOCAL_JOIN_POLICY_AUTO;
-
-
 /* track depth of current recursive planner query */
 static int recursivePlanningDepth = 0;
 
@@ -348,9 +341,11 @@ RecursivelyPlanSubqueriesAndCTEs(Query *query, RecursivePlanningContext *context
 	/*
 	 * Logical planner cannot handle "local_table" [OUTER] JOIN "dist_table", or
 	 * a query with local table/citus local table and subquery. We convert local/citus local
-	 * tables to a subquery until they can be planned
+	 * tables to a subquery until they can be planned.
+	 * This is the last call in this function since we want the other calls to be finished
+	 * so that we can check if the current plan is router plannable at any step within this function.
 	 */
-	ConvertUnplannableTableJoinsToSubqueries(query, context);
+	RecursivelyPlanLocalTableJoins(query, context);
 
 	return NULL;
 }
