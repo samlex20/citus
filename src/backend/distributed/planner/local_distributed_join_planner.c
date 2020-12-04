@@ -141,6 +141,10 @@ RecursivelyPlanLocalTableJoins(Query *query,
 		RangeTableEntryDetails *rangeTableEntryDetails =
 			GetNextRTEToConvertToSubquery(joinTree, conversionCandidates,
 										  plannerRestrictionContext);
+		if (rangeTableEntryDetails == NULL)
+		{
+			break;
+		}
 
 		RangeTblEntry *rangeTableEntry = rangeTableEntryDetails->rangeTableEntry;
 		Oid relId = rangeTableEntryDetails->rangeTableEntry->relid;

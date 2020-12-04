@@ -935,7 +935,7 @@ SET client_min_messages to ERROR;
 SELECT master_add_node('localhost', :master_port, groupId => 0);
  master_add_node
 ---------------------------------------------------------------------
-              5
+              30
 (1 row)
 
 CREATE TABLE citus_local(key int, value text);
@@ -1090,6 +1090,9 @@ DEBUG:  Plan XXX query after replacing subqueries and CTEs: SELECT count(*) AS c
 
 -- TODO:: we should support this?
 UPDATE reference_table SET key = 1 FROM postgres_table WHERE postgres_table.key = 10;
+DEBUG:  Wrapping relation "postgres_table" to a subquery: SELECT key, NULL::text AS value, NULL::jsonb AS value_2 FROM local_table_join.postgres_table WHERE (key OPERATOR(pg_catalog.=) 10) OFFSET 0
+DEBUG:  generating subplan XXX_1 for subquery SELECT key, NULL::text AS value, NULL::jsonb AS value_2 FROM local_table_join.postgres_table WHERE (key OPERATOR(pg_catalog.=) 10) OFFSET 0
+DEBUG:  Plan XXX query after replacing subqueries and CTEs: UPDATE local_table_join.reference_table SET key = 1 FROM (SELECT intermediate_result.key, intermediate_result.value, intermediate_result.value_2 FROM read_intermediate_result('XXX_1'::text, 'binary'::citus_copy_format) intermediate_result(key integer, value text, value_2 jsonb)) postgres_table WHERE (postgres_table.key OPERATOR(pg_catalog.=) 10)
 ERROR:  relation postgres_table is not distributed
 UPDATE reference_table SET key = 1 FROM (SELECT * FROM postgres_table) l WHERE l.key = 10;
 DEBUG:  generating subplan XXX_1 for subquery SELECT key, value, value_2 FROM local_table_join.postgres_table
