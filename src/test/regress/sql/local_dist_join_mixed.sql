@@ -20,6 +20,8 @@ INSERT INTO distributed SELECT i,  i::text, now() FROM generate_series(0,100)i;
 INSERT INTO reference SELECT i,  i::text FROM generate_series(0,100)i;
 INSERT INTO local SELECT i,  i::text FROM generate_series(0,100)i;
 
+SET client_min_messages to DEBUG1;
+
 -- very simple 1-1 Joins
 SELECT count(*) FROM distributed JOIN local USING (id);
 SELECT count(*) FROM distributed JOIN local ON (name = title);
