@@ -1,5 +1,5 @@
-CREATE SCHEMA local_distributed_table_join;
-SET search_path TO local_distributed_table_join;
+CREATE SCHEMA local_dist_join_mixed;
+SET search_path TO local_dist_join_mixed;
 CREATE TABLE distributed (id bigserial PRIMARY KEY,
                     	  name text,
                     	  created_at timestamptz DEFAULT now());
@@ -860,17 +860,17 @@ SELECT count(*) FROM local LEFT JOIN distributed USING (id);
    101
 (1 row)
 
-SELECT * FROM distributed LEFT JOIN local USING (id) LIMIT 1;
- id | name |             created_at              | title
+SELECT id, name FROM distributed LEFT JOIN local USING (id) LIMIT 1;
+ id | name
 ---------------------------------------------------------------------
-  1 | 1    | Sat Dec 05 09:27:02.001893 2020 PST | 1
+  1 | 1
 (1 row)
 
-SELECT * FROM local LEFT JOIN distributed USING (id) LIMIT 1;
+SELECT id, name FROM local LEFT JOIN distributed USING (id) LIMIT 1;
 ERROR:  cannot pushdown the subquery
 DETAIL:  Complex subqueries and CTEs cannot be in the outer part of the outer join
  SELECT
-        foo1.id, random()
+        foo1.id
     FROM
  (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo9,
  (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo8,
@@ -892,251 +892,254 @@ DETAIL:  Complex subqueries and CTEs cannot be in the outer part of the outer jo
   foo1.id =  foo3.id AND
   foo1.id =  foo2.id AND
   foo1.id =  foo10.id AND
-  foo1.id =  foo1.id  ;
- id  |       random
----------------------------------------------------------------------
-   2 |  0.721385073970438
-   9 |  0.322541553310341
-  11 |  0.960177688523025
-  12 |  0.355231459407353
-  18 |  0.252089157628063
-  22 |  0.109083132340043
-  23 |  0.919578742315515
-  27 |  0.601420012129712
-  29 |  0.611650596651387
-  30 |  0.340444916369787
-  32 |  0.295277368003717
-  41 | 0.0783703371986384
-  42 |  0.406558089497224
-  44 |  0.351596885565197
-  47 | 0.0428858489950201
-  58 |  0.808403489577092
-  59 |  0.853884746450703
-  67 |   0.94638019150349
-  68 |  0.712558952088521
-  69 |  0.110273078309579
-  72 |  0.207842815130675
-  75 |  0.358770542774817
-  76 |  0.316946774397003
-  78 |  0.223509769097848
-  80 |  0.313105102567434
-  81 |   0.16027444421081
-  90 |  0.126143955458467
-  95 |  0.595570703377636
-   1 |  0.151885055340621
-   5 |  0.841986787528345
-   8 |  0.910715716227244
-  10 |  0.371803844344125
-  15 |  0.108339975728136
-  20 |  0.355050880036291
-  24 |  0.761377617166062
-  25 |  0.396657665723193
-  26 |  0.151822764013509
-  31 | 0.0140065825763322
-  33 |  0.867743985522779
-  35 |  0.511508252145486
-  48 |  0.601036015770738
-  50 |  0.315659770786997
-  53 |  0.856373566522734
-  60 |   0.92934834777115
-  63 |  0.472241261898013
-  77 |  0.401229966908421
-  79 |  0.216918017810499
-  82 |  0.957838694728249
-  87 |  0.557490341488226
-  88 |  0.281130769868302
-  92 |  0.341464984345322
-  94 |  0.287201087188304
-   0 |  0.253862256491633
-   3 |  0.589337524216234
-   4 |  0.794989255390771
-   7 |  0.725663071520053
-  14 |  0.493233970743024
-  16 |  0.885733589338074
-  17 |  0.219060368966293
-  19 |  0.507643690611154
-  36 |  0.831520244966132
-  37 |  0.861323384638808
-  40 |  0.132788066660208
-  45 |  0.161328349097381
-  51 |  0.578704738132718
-  54 |  0.329123354566732
-  55 |  0.240882480380147
-  61 | 0.0740507179917742
-  64 |  0.147449811718449
-  65 | 0.0604282112726935
-  74 |  0.117142594637198
-  84 |  0.365015981549739
-  85 |  0.946111382591784
-  89 |   0.83186448125484
-  91 |  0.805836070416856
-  93 |   0.41386202052049
-  96 |  0.319641414114106
-  98 |   0.78117824544762
-   6 |   0.01744125926189
-  13 |  0.480042599645429
-  21 |  0.126400359133765
-  28 |    0.6321726489818
-  34 | 0.0314669329432782
-  38 |  0.727441339897709
-  39 |  0.774467811660397
-  43 |  0.826165913545616
-  46 |  0.553227102695846
-  49 |  0.756053219395881
-  52 |  0.205651631497215
-  56 |  0.576566896677811
-  57 |  0.453865900644349
-  62 |  0.949924410866757
-  66 |  0.418104153283817
-  70 |  0.350091381641157
-  71 |  0.251547218956436
-  73 |  0.575085021997012
-  83 |  0.760484905661496
-  86 |  0.583429905669171
-  97 |  0.752508331499843
-  99 |  0.510533515948779
- 100 | 0.0566592026918009
-(101 rows)
-
-
-   SELECT
-        foo1.id
-    FROM
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo1,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo2,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo3,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo4,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo5
-    WHERE
-        foo1.id = foo4.id AND
-        foo1.id = foo2.id AND
-        foo1.id = foo3.id AND
-        foo1.id = foo4.id AND
-        foo1.id = foo5.id;
+  foo1.id =  foo1.id
+ORDER BY 1;
  id
 ---------------------------------------------------------------------
    0
+   1
+   2
    3
    4
+   5
+   6
    7
+   8
+   9
+  10
+  11
+  12
+  13
   14
+  15
   16
   17
+  18
   19
-  36
-  37
-  40
-  45
-  51
-  54
-  55
-  61
-  64
-  65
-  74
-  84
-  85
-  89
-  91
-  93
-  96
-  98
-   1
-   5
-   8
-  10
-  15
   20
+  21
+  22
+  23
   24
   25
   26
-  31
-  33
-  35
-  48
-  50
-  53
-  60
-  63
-  77
-  79
-  82
-  87
-  88
-  92
-  94
-   6
-  13
-  21
-  28
-  34
-  38
-  39
-  43
-  46
-  49
-  52
-  56
-  57
-  62
-  66
-  70
-  71
-  73
-  83
-  86
-  97
-  99
- 100
-   2
-   9
-  11
-  12
-  18
-  22
-  23
   27
+  28
   29
   30
+  31
   32
+  33
+  34
+  35
+  36
+  37
+  38
+  39
+  40
   41
   42
+  43
   44
+  45
+  46
   47
+  48
+  49
+  50
+  51
+  52
+  53
+  54
+  55
+  56
+  57
   58
   59
+  60
+  61
+  62
+  63
+  64
+  65
+  66
   67
   68
   69
+  70
+  71
   72
+  73
+  74
   75
   76
+  77
   78
+  79
   80
   81
+  82
+  83
+  84
+  85
+  86
+  87
+  88
+  89
   90
+  91
+  92
+  93
+  94
   95
+  96
+  97
+  98
+  99
+ 100
 (101 rows)
 
-   SELECT
-        foo1.id
-    FROM
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 1) as foo1,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 2) as foo2,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 3) as foo3,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 4) as foo4,
-        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 5) as foo5
-    WHERE
-        foo1.id = foo4.id AND
-        foo1.id = foo2.id AND
-        foo1.id = foo3.id AND
-        foo1.id = foo4.id AND
-        foo1.id = foo5.id;
+
+SELECT
+	foo1.id
+FROM
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo1,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo2,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo3,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo4,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo5
+WHERE
+	foo1.id = foo4.id AND
+	foo1.id = foo2.id AND
+	foo1.id = foo3.id AND
+	foo1.id = foo4.id AND
+	foo1.id = foo5.id
+ORDER BY 1;	
+ id
+---------------------------------------------------------------------
+   0
+   1
+   2
+   3
+   4
+   5
+   6
+   7
+   8
+   9
+  10
+  11
+  12
+  13
+  14
+  15
+  16
+  17
+  18
+  19
+  20
+  21
+  22
+  23
+  24
+  25
+  26
+  27
+  28
+  29
+  30
+  31
+  32
+  33
+  34
+  35
+  36
+  37
+  38
+  39
+  40
+  41
+  42
+  43
+  44
+  45
+  46
+  47
+  48
+  49
+  50
+  51
+  52
+  53
+  54
+  55
+  56
+  57
+  58
+  59
+  60
+  61
+  62
+  63
+  64
+  65
+  66
+  67
+  68
+  69
+  70
+  71
+  72
+  73
+  74
+  75
+  76
+  77
+  78
+  79
+  80
+  81
+  82
+  83
+  84
+  85
+  86
+  87
+  88
+  89
+  90
+  91
+  92
+  93
+  94
+  95
+  96
+  97
+  98
+  99
+ 100
+(101 rows)
+
+SELECT
+	foo1.id
+FROM
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 1) as foo1,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 2) as foo2,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 3) as foo3,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 4) as foo4,
+	(SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 5) as foo5
+WHERE
+	foo1.id = foo4.id AND
+	foo1.id = foo2.id AND
+	foo1.id = foo3.id AND
+	foo1.id = foo4.id AND
+	foo1.id = foo5.id
+ORDER BY 1;	
  id
 ---------------------------------------------------------------------
 (0 rows)
 
-DROP SCHEMA local_distributed_table_join CASCADE;
+DROP SCHEMA local_dist_join_mixed CASCADE;
 NOTICE:  drop cascades to 7 other objects
 DETAIL:  drop cascades to table distributed
 drop cascades to table reference
