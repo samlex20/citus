@@ -1,0 +1,1147 @@
+CREATE SCHEMA local_distributed_table_join;
+SET search_path TO local_distributed_table_join;
+CREATE TABLE distributed (id bigserial PRIMARY KEY,
+                    	  name text,
+                    	  created_at timestamptz DEFAULT now());
+CREATE TABLE reference (id bigserial PRIMARY KEY,
+                    	title text);
+CREATE TABLE local (id bigserial PRIMARY KEY,
+                    title text);
+-- these above restrictions brought us to the following schema
+SELECT create_reference_table('reference');
+ create_reference_table
+---------------------------------------------------------------------
+
+(1 row)
+
+SELECT create_distributed_table('distributed', 'id');
+ create_distributed_table
+---------------------------------------------------------------------
+
+(1 row)
+
+INSERT INTO distributed SELECT i,  i::text, now() FROM generate_series(0,100)i;
+INSERT INTO reference SELECT i,  i::text FROM generate_series(0,100)i;
+INSERT INTO local SELECT i,  i::text FROM generate_series(0,100)i;
+-- very simple 1-1 Joins
+SELECT count(*) FROM distributed JOIN local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM distributed JOIN local ON (name = title);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM distributed d1 JOIN local ON (name = d1.id::text);
+ count
+---------------------------------------------------------------------
+ 10201
+(1 row)
+
+SELECT count(*) FROM distributed d1 JOIN local ON (name = d1.id::text AND d1.id < local.title::int);
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+SELECT count(*) FROM distributed d1 JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1;
+ count
+---------------------------------------------------------------------
+    99
+(1 row)
+
+SELECT count(*) FROM distributed JOIN local USING (id) WHERE false;
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+SELECT count(*) FROM distributed d1 JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1 OR True;
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+SELECT count(*) FROM distributed d1 JOIN local ON (name::int + local.id > d1.id AND d1.id < local.title::int) WHERE d1.id = 1;
+ count
+---------------------------------------------------------------------
+    99
+(1 row)
+
+SELECT count(*) FROM distributed JOIN local ON (hashtext(name) = hashtext(title));
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT hashtext(local.id::text) FROM distributed JOIN local ON (hashtext(name) = hashtext(title)) ORDER BY 1 LIMIT 4;
+  hashtext
+---------------------------------------------------------------------
+ -2114455578
+ -2097988278
+ -1997006946
+ -1985772843
+(4 rows)
+
+SELECT '' as "xxx", local.*, 'xxx' as "test" FROM distributed JOIN local ON (hashtext(name) = hashtext(title)) ORDER BY 1,2,3 LIMIT 4;
+ xxx | id | title | test
+---------------------------------------------------------------------
+     |  0 | 0     | xxx
+     |  1 | 1     | xxx
+     |  2 | 2     | xxx
+     |  3 | 3     | xxx
+(4 rows)
+
+SELECT local.title, count(*) FROM distributed JOIN local USING (id) GROUP BY 1 ORDER BY 1, 2 DESC LIMIT 5;
+ title | count
+---------------------------------------------------------------------
+ 0     |     1
+ 1     |     1
+ 10    |     1
+ 100   |     1
+ 11    |     1
+(5 rows)
+
+SELECT distributed.id as id1, local.id  as id2 FROM distributed JOIN local USING(id) ORDER BY distributed.id + local.id LIMIT 5;
+ id1 | id2
+---------------------------------------------------------------------
+   0 |   0
+   1 |   1
+   2 |   2
+   3 |   3
+   4 |   4
+(5 rows)
+
+SELECT distributed.id as id1, local.id  as id2, count(*) FROM distributed JOIN local USING(id) GROUP BY distributed.id, local.id ORDER BY 1,2 LIMIT 5;
+ id1 | id2 | count
+---------------------------------------------------------------------
+   0 |   0 |     1
+   1 |   1 |     1
+   2 |   2 |     1
+   3 |   3 |     1
+   4 |   4 |     1
+(5 rows)
+
+-- basic subqueries that cannot be pulled up
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1 JOIN local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1  JOIN local ON (name = title);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1  JOIN local ON (name = d1.id::text);
+ count
+---------------------------------------------------------------------
+ 10201
+(1 row)
+
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int);
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1;
+ count
+---------------------------------------------------------------------
+    99
+(1 row)
+
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1 AND false;
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+SELECT count(*) FROM (SELECT *, random() FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1 OR true;
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+-- pull up subqueries as they are pretty simple, local table should be recursively planned
+SELECT count(*) FROM (SELECT * FROM distributed) as d1 JOIN local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed) as d1  JOIN local ON (name = title);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed) as d1  JOIN local ON (name = d1.id::text);
+ count
+---------------------------------------------------------------------
+ 10201
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int);
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1;
+ count
+---------------------------------------------------------------------
+    99
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1 AND false;
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1 OR true;
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed WHERE id = 2) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1;
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+SELECT count(*) FROM (SELECT * FROM distributed WHERE false) as d1  JOIN local ON (name = d1.id::text AND d1.id < local.title::int) WHERE d1.id = 1;
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+-- TEMPORARY table
+CREATE TEMPORARY TABLE temp_local AS SELECT * FROM local;
+SELECT count(*) FROM distributed JOIN temp_local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- UNLOGGED table
+CREATE UNLOGGED TABLE unlogged_local AS SELECT * FROM local;
+SELECT count(*) FROM distributed JOIN unlogged_local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- mat view
+CREATE MATERIALIZED VIEW mat_view AS SELECT * FROM local;
+SELECT count(*) FROM distributed JOIN mat_view USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+CREATE VIEW local_regular_view AS SELECT * FROM local;
+CREATE VIEW dist_regular_view AS SELECT * FROM distributed;
+SELECT count(*) FROM distributed JOIN local_regular_view USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM local JOIN dist_regular_view USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM dist_regular_view JOIN local_regular_view USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- join alias/table alias
+SELECT COUNT(*) FROM (distributed JOIN local USING (id)) AS t(a,b,c,d) ORDER BY d,c,a,b LIMIT 3;
+ERROR:  column "local.title" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT COUNT(*) FROM (distributed d1(x,y,y1) JOIN local l1(x,t) USING (x)) AS t(a,b,c,d) ORDER BY d,c,a,b LIMIT 3;
+ERROR:  column "l1.t" must appear in the GROUP BY clause or be used in an aggregate function
+-- final queries are pushdown queries
+SELECT sum(d1.id + local.id) FROM distributed d1 JOIN local USING (id);
+  sum
+---------------------------------------------------------------------
+ 10100
+(1 row)
+
+SELECT sum(d1.id + local.id) OVER (PARTITION BY d1.id) FROM distributed d1 JOIN local USING (id) ORDER BY 1 DESC LIMIT 4;
+ sum
+---------------------------------------------------------------------
+ 200
+ 198
+ 196
+ 194
+(4 rows)
+
+SELECT count(*) FROM distributed d1 JOIN local USING (id) LEFT JOIN distributed d2 USING (id) ORDER BY 1 DESC LIMIT 4;
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(DISTINCT d1.name::int * local.id) FROM distributed d1 JOIN local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- final queries are router queries
+SELECT sum(d1.id + local.id) FROM distributed d1 JOIN local USING (id) WHERE d1.id = 1;
+ sum
+---------------------------------------------------------------------
+   2
+(1 row)
+
+SELECT sum(d1.id + local.id) OVER (PARTITION BY d1.id) FROM distributed d1 JOIN local USING (id) WHERE d1.id = 1 ORDER BY 1 DESC LIMIT 4;
+ sum
+---------------------------------------------------------------------
+   2
+(1 row)
+
+SELECT count(*) FROM distributed d1 JOIN local USING (id) LEFT JOIN distributed d2 USING (id) WHERE d2.id = 1 ORDER BY 1 DESC LIMIT 4;
+ count
+---------------------------------------------------------------------
+     1
+(1 row)
+
+-- final queries are pull to coordinator queries
+SELECT sum(d1.id + local.id) OVER (PARTITION BY d1.id + local.id) FROM distributed d1 JOIN local USING (id) ORDER BY 1 DESC LIMIT 4;
+ sum
+---------------------------------------------------------------------
+ 200
+ 198
+ 196
+ 194
+(4 rows)
+
+-- nested subqueries
+SELECT
+	count(*)
+FROM
+	(SELECT * FROM (SELECT * FROM distributed) as foo) as bar
+		JOIN
+	local
+		USING(id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT
+	count(*)
+FROM
+	(SELECT *, random() FROM (SELECT *, random() FROM distributed) as foo) as bar
+		JOIN
+	local
+		USING(id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT
+	count(*)
+FROM
+	(SELECT *, random() FROM (SELECT *, random() FROM distributed) as foo) as bar
+		JOIN
+	local
+		USING(id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT
+	count(*)
+FROM
+	(SELECT *, random() FROM (SELECT *, random() FROM distributed) as foo) as bar
+		JOIN
+	(SELECT *, random() FROM (SELECT *,random() FROM local) as foo2) as bar2
+		USING(id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- TODO: Unnecessary recursive planning for local
+SELECT
+	count(*)
+FROM
+	(SELECT *, random() FROM (SELECT *, random() FROM distributed LIMIT 1) as foo) as bar
+		JOIN
+	(SELECT *, random() FROM (SELECT *,random() FROM local) as foo2) as bar2
+		USING(id);
+ count
+---------------------------------------------------------------------
+     1
+(1 row)
+
+-- subqueries in WHERE clause
+-- is not colocated, and the JOIN inside as well.
+-- so should be recursively planned twice
+SELECT
+	count(*)
+FROM
+	distributed
+WHERE
+	id  > (SELECT
+				count(*)
+			FROM
+				(SELECT *, random() FROM (SELECT *, random() FROM distributed) as foo) as bar
+					JOIN
+				(SELECT *, random() FROM (SELECT *,random() FROM local) as foo2) as bar2
+					USING(id)
+			);
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+-- two distributed tables are co-located and JOINed on distribution
+-- key, so should be fine to pushdown
+SELECT
+	count(*)
+FROM
+	distributed d_upper
+WHERE
+	(SELECT
+				bar.id
+			FROM
+				(SELECT *, random() FROM (SELECT *, random() FROM distributed WHERE distributed.id = d_upper.id) as foo) as bar
+					JOIN
+				(SELECT *, random() FROM (SELECT *,random() FROM local) as foo2) as bar2
+					USING(id)
+			) IS NOT NULL;
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT
+	count(*)
+FROM
+	distributed d_upper
+WHERE
+	(SELECT
+				bar.id
+			FROM
+				(SELECT *, random() FROM (SELECT *, random() FROM distributed WHERE distributed.id = d_upper.id) as foo) as bar
+					JOIN
+				  local as foo
+					USING(id)
+			) IS NOT NULL;
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT
+	count(*)
+FROM
+	distributed d_upper
+WHERE d_upper.id >
+	(SELECT
+				bar.id
+			FROM
+				(SELECT *, random() FROM (SELECT *, random() FROM distributed WHERE distributed.id = d_upper.id) as foo) as bar
+					JOIN
+				  local as foo
+					USING(id)
+			);
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+SELECT
+	count(*)
+FROM
+	distributed d_upper
+WHERE
+	(SELECT
+				bar.id
+			FROM
+				(SELECT *, random() FROM (SELECT *, random() FROM distributed WHERE distributed.id = d_upper.id) as foo) as bar
+					JOIN
+				(SELECT *, random() FROM (SELECT *,random() FROM local WHERE d_upper.id = id) as foo2) as bar2
+					USING(id)
+			) IS NOT NULL;
+ERROR:  direct joins between distributed and local tables are not supported
+HINT:  Use CTE's or subqueries to select from local tables and use them in joins
+-- subqueries in the target list
+-- router, should work
+select (SELECT local.id) FROM local, distributed WHERE distributed.id = 1 LIMIT 1;
+ id
+---------------------------------------------------------------------
+  0
+(1 row)
+
+-- should fail
+select (SELECT local.id) FROM local, distributed WHERE distributed.id != 1 LIMIT 1;
+ERROR:  could not run distributed query with subquery outside the FROM, WHERE and HAVING clauses
+HINT:  Consider using an equality filter on the distributed table's partition column.
+-- currently not supported, but should work with https://github.com/citusdata/citus/pull/4360/files
+SELECT
+	name, (SELECT id FROM local WHERE id = e.id)
+FROM
+	distributed e
+ORDER BY 1,2 LIMIT 1;
+ERROR:  could not run distributed query with subquery outside the FROM, WHERE and HAVING clauses
+HINT:  Consider using an equality filter on the distributed table's partition column.
+-- set operations
+SELECT local.* FROM distributed JOIN local USING (id)
+	EXCEPT
+SELECT local.* FROM distributed JOIN local USING (id);
+ id | title
+---------------------------------------------------------------------
+(0 rows)
+
+SELECT distributed.* FROM distributed JOIN local USING (id)
+	EXCEPT
+SELECT distributed.* FROM distributed JOIN local USING (id);
+ id | name | created_at
+---------------------------------------------------------------------
+(0 rows)
+
+SELECT count(*) FROM
+(
+	(SELECT * FROM (SELECT * FROM local) as f JOIN distributed USING (id))
+		UNION ALL
+	(SELECT * FROM (SELECT * FROM local) as f2 JOIN distributed USING (id))
+) bar;
+ count
+---------------------------------------------------------------------
+   202
+(1 row)
+
+SELECT count(*) FROM
+(
+	(SELECT * FROM (SELECT distributed.* FROM local JOIN distributed USING (id)) as fo)
+		UNION ALL
+	(SELECT * FROM (SELECT distributed.* FROM local JOIN distributed USING (id)) as ba)
+) bar;
+ count
+---------------------------------------------------------------------
+   202
+(1 row)
+
+select count(DISTINCT id)
+FROM
+(
+	(SELECT * FROM (SELECT distributed.* FROM local JOIN distributed USING (id)) as fo)
+		UNION ALL
+	(SELECT * FROM (SELECT distributed.* FROM local JOIN distributed USING (id)) as ba)
+) bar;
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- 25 Joins
+select ' select count(*) from distributed ' || string_Agg('INNER
+JOIN local u'|| x::text || ' USING (id)',' ') from
+generate_Series(1,25)x;
+                ?column?
+---------------------------------------------------------------------
+  select count(*) from distributed INNER+
+ JOIN local u1 USING (id) INNER         +
+ JOIN local u2 USING (id) INNER         +
+ JOIN local u3 USING (id) INNER         +
+ JOIN local u4 USING (id) INNER         +
+ JOIN local u5 USING (id) INNER         +
+ JOIN local u6 USING (id) INNER         +
+ JOIN local u7 USING (id) INNER         +
+ JOIN local u8 USING (id) INNER         +
+ JOIN local u9 USING (id) INNER         +
+ JOIN local u10 USING (id) INNER        +
+ JOIN local u11 USING (id) INNER        +
+ JOIN local u12 USING (id) INNER        +
+ JOIN local u13 USING (id) INNER        +
+ JOIN local u14 USING (id) INNER        +
+ JOIN local u15 USING (id) INNER        +
+ JOIN local u16 USING (id) INNER        +
+ JOIN local u17 USING (id) INNER        +
+ JOIN local u18 USING (id) INNER        +
+ JOIN local u19 USING (id) INNER        +
+ JOIN local u20 USING (id) INNER        +
+ JOIN local u21 USING (id) INNER        +
+ JOIN local u22 USING (id) INNER        +
+ JOIN local u23 USING (id) INNER        +
+ JOIN local u24 USING (id) INNER        +
+ JOIN local u25 USING (id)
+(1 row)
+
+\gexec
+ select count(*) from distributed INNER
+JOIN local u1 USING (id) INNER
+JOIN local u2 USING (id) INNER
+JOIN local u3 USING (id) INNER
+JOIN local u4 USING (id) INNER
+JOIN local u5 USING (id) INNER
+JOIN local u6 USING (id) INNER
+JOIN local u7 USING (id) INNER
+JOIN local u8 USING (id) INNER
+JOIN local u9 USING (id) INNER
+JOIN local u10 USING (id) INNER
+JOIN local u11 USING (id) INNER
+JOIN local u12 USING (id) INNER
+JOIN local u13 USING (id) INNER
+JOIN local u14 USING (id) INNER
+JOIN local u15 USING (id) INNER
+JOIN local u16 USING (id) INNER
+JOIN local u17 USING (id) INNER
+JOIN local u18 USING (id) INNER
+JOIN local u19 USING (id) INNER
+JOIN local u20 USING (id) INNER
+JOIN local u21 USING (id) INNER
+JOIN local u22 USING (id) INNER
+JOIN local u23 USING (id) INNER
+JOIN local u24 USING (id) INNER
+JOIN local u25 USING (id)
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+select ' select count(*) from distributed ' || string_Agg('INNER
+JOIN local u'|| x::text || ' ON (false)',' ') from
+generate_Series(1,25)x;
+                ?column?
+---------------------------------------------------------------------
+  select count(*) from distributed INNER+
+ JOIN local u1 ON (false) INNER         +
+ JOIN local u2 ON (false) INNER         +
+ JOIN local u3 ON (false) INNER         +
+ JOIN local u4 ON (false) INNER         +
+ JOIN local u5 ON (false) INNER         +
+ JOIN local u6 ON (false) INNER         +
+ JOIN local u7 ON (false) INNER         +
+ JOIN local u8 ON (false) INNER         +
+ JOIN local u9 ON (false) INNER         +
+ JOIN local u10 ON (false) INNER        +
+ JOIN local u11 ON (false) INNER        +
+ JOIN local u12 ON (false) INNER        +
+ JOIN local u13 ON (false) INNER        +
+ JOIN local u14 ON (false) INNER        +
+ JOIN local u15 ON (false) INNER        +
+ JOIN local u16 ON (false) INNER        +
+ JOIN local u17 ON (false) INNER        +
+ JOIN local u18 ON (false) INNER        +
+ JOIN local u19 ON (false) INNER        +
+ JOIN local u20 ON (false) INNER        +
+ JOIN local u21 ON (false) INNER        +
+ JOIN local u22 ON (false) INNER        +
+ JOIN local u23 ON (false) INNER        +
+ JOIN local u24 ON (false) INNER        +
+ JOIN local u25 ON (false)
+(1 row)
+
+\gexec
+ select count(*) from distributed INNER
+JOIN local u1 ON (false) INNER
+JOIN local u2 ON (false) INNER
+JOIN local u3 ON (false) INNER
+JOIN local u4 ON (false) INNER
+JOIN local u5 ON (false) INNER
+JOIN local u6 ON (false) INNER
+JOIN local u7 ON (false) INNER
+JOIN local u8 ON (false) INNER
+JOIN local u9 ON (false) INNER
+JOIN local u10 ON (false) INNER
+JOIN local u11 ON (false) INNER
+JOIN local u12 ON (false) INNER
+JOIN local u13 ON (false) INNER
+JOIN local u14 ON (false) INNER
+JOIN local u15 ON (false) INNER
+JOIN local u16 ON (false) INNER
+JOIN local u17 ON (false) INNER
+JOIN local u18 ON (false) INNER
+JOIN local u19 ON (false) INNER
+JOIN local u20 ON (false) INNER
+JOIN local u21 ON (false) INNER
+JOIN local u22 ON (false) INNER
+JOIN local u23 ON (false) INNER
+JOIN local u24 ON (false) INNER
+JOIN local u25 ON (false)
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+select ' select count(*) from local ' || string_Agg('INNER
+JOIN distributed u'|| x::text || ' USING (id)',' ') from
+generate_Series(1,25)x;
+               ?column?
+---------------------------------------------------------------------
+  select count(*) from local INNER    +
+ JOIN distributed u1 USING (id) INNER +
+ JOIN distributed u2 USING (id) INNER +
+ JOIN distributed u3 USING (id) INNER +
+ JOIN distributed u4 USING (id) INNER +
+ JOIN distributed u5 USING (id) INNER +
+ JOIN distributed u6 USING (id) INNER +
+ JOIN distributed u7 USING (id) INNER +
+ JOIN distributed u8 USING (id) INNER +
+ JOIN distributed u9 USING (id) INNER +
+ JOIN distributed u10 USING (id) INNER+
+ JOIN distributed u11 USING (id) INNER+
+ JOIN distributed u12 USING (id) INNER+
+ JOIN distributed u13 USING (id) INNER+
+ JOIN distributed u14 USING (id) INNER+
+ JOIN distributed u15 USING (id) INNER+
+ JOIN distributed u16 USING (id) INNER+
+ JOIN distributed u17 USING (id) INNER+
+ JOIN distributed u18 USING (id) INNER+
+ JOIN distributed u19 USING (id) INNER+
+ JOIN distributed u20 USING (id) INNER+
+ JOIN distributed u21 USING (id) INNER+
+ JOIN distributed u22 USING (id) INNER+
+ JOIN distributed u23 USING (id) INNER+
+ JOIN distributed u24 USING (id) INNER+
+ JOIN distributed u25 USING (id)
+(1 row)
+
+\gexec
+ select count(*) from local INNER
+JOIN distributed u1 USING (id) INNER
+JOIN distributed u2 USING (id) INNER
+JOIN distributed u3 USING (id) INNER
+JOIN distributed u4 USING (id) INNER
+JOIN distributed u5 USING (id) INNER
+JOIN distributed u6 USING (id) INNER
+JOIN distributed u7 USING (id) INNER
+JOIN distributed u8 USING (id) INNER
+JOIN distributed u9 USING (id) INNER
+JOIN distributed u10 USING (id) INNER
+JOIN distributed u11 USING (id) INNER
+JOIN distributed u12 USING (id) INNER
+JOIN distributed u13 USING (id) INNER
+JOIN distributed u14 USING (id) INNER
+JOIN distributed u15 USING (id) INNER
+JOIN distributed u16 USING (id) INNER
+JOIN distributed u17 USING (id) INNER
+JOIN distributed u18 USING (id) INNER
+JOIN distributed u19 USING (id) INNER
+JOIN distributed u20 USING (id) INNER
+JOIN distributed u21 USING (id) INNER
+JOIN distributed u22 USING (id) INNER
+JOIN distributed u23 USING (id) INNER
+JOIN distributed u24 USING (id) INNER
+JOIN distributed u25 USING (id)
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+select ' select count(*) from local ' || string_Agg('INNER
+JOIN distributed u'|| x::text || ' ON (false)',' ') from
+generate_Series(1,25)x;
+               ?column?
+---------------------------------------------------------------------
+  select count(*) from local INNER    +
+ JOIN distributed u1 ON (false) INNER +
+ JOIN distributed u2 ON (false) INNER +
+ JOIN distributed u3 ON (false) INNER +
+ JOIN distributed u4 ON (false) INNER +
+ JOIN distributed u5 ON (false) INNER +
+ JOIN distributed u6 ON (false) INNER +
+ JOIN distributed u7 ON (false) INNER +
+ JOIN distributed u8 ON (false) INNER +
+ JOIN distributed u9 ON (false) INNER +
+ JOIN distributed u10 ON (false) INNER+
+ JOIN distributed u11 ON (false) INNER+
+ JOIN distributed u12 ON (false) INNER+
+ JOIN distributed u13 ON (false) INNER+
+ JOIN distributed u14 ON (false) INNER+
+ JOIN distributed u15 ON (false) INNER+
+ JOIN distributed u16 ON (false) INNER+
+ JOIN distributed u17 ON (false) INNER+
+ JOIN distributed u18 ON (false) INNER+
+ JOIN distributed u19 ON (false) INNER+
+ JOIN distributed u20 ON (false) INNER+
+ JOIN distributed u21 ON (false) INNER+
+ JOIN distributed u22 ON (false) INNER+
+ JOIN distributed u23 ON (false) INNER+
+ JOIN distributed u24 ON (false) INNER+
+ JOIN distributed u25 ON (false)
+(1 row)
+
+\gexec
+ select count(*) from local INNER
+JOIN distributed u1 ON (false) INNER
+JOIN distributed u2 ON (false) INNER
+JOIN distributed u3 ON (false) INNER
+JOIN distributed u4 ON (false) INNER
+JOIN distributed u5 ON (false) INNER
+JOIN distributed u6 ON (false) INNER
+JOIN distributed u7 ON (false) INNER
+JOIN distributed u8 ON (false) INNER
+JOIN distributed u9 ON (false) INNER
+JOIN distributed u10 ON (false) INNER
+JOIN distributed u11 ON (false) INNER
+JOIN distributed u12 ON (false) INNER
+JOIN distributed u13 ON (false) INNER
+JOIN distributed u14 ON (false) INNER
+JOIN distributed u15 ON (false) INNER
+JOIN distributed u16 ON (false) INNER
+JOIN distributed u17 ON (false) INNER
+JOIN distributed u18 ON (false) INNER
+JOIN distributed u19 ON (false) INNER
+JOIN distributed u20 ON (false) INNER
+JOIN distributed u21 ON (false) INNER
+JOIN distributed u22 ON (false) INNER
+JOIN distributed u23 ON (false) INNER
+JOIN distributed u24 ON (false) INNER
+JOIN distributed u25 ON (false)
+ count
+---------------------------------------------------------------------
+     0
+(1 row)
+
+-- lateral joins
+SELECT COUNT(*) FROM (VALUES (1), (2), (3))  as f(x) LATERAL JOIN (SELECT * FROM local WHERE id  =  x) as bar;
+ERROR:  syntax error at or near "LATERAL"
+SELECT COUNT(*) FROM local JOIN LATERAL (SELECT * FROM distributed WHERE local.id = distributed.id) as foo ON (true);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT COUNT(*) FROM local JOIN LATERAL (SELECT * FROM distributed WHERE local.id > distributed.id) as foo ON (true);
+ count
+---------------------------------------------------------------------
+  5050
+(1 row)
+
+SELECT COUNT(*) FROM distributed JOIN LATERAL (SELECT * FROM local WHERE local.id = distributed.id) as foo ON (true);
+ERROR:  direct joins between distributed and local tables are not supported
+HINT:  Use CTE's or subqueries to select from local tables and use them in joins
+SELECT COUNT(*) FROM distributed JOIN LATERAL (SELECT * FROM local WHERE local.id > distributed.id) as foo ON (true);
+ERROR:  direct joins between distributed and local tables are not supported
+HINT:  Use CTE's or subqueries to select from local tables and use them in joins
+SELECT count(*) FROM distributed CROSS JOIN local;
+ count
+---------------------------------------------------------------------
+ 10201
+(1 row)
+
+SELECT count(*) FROM distributed CROSS JOIN local WHERE distributed.id = 1;
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+-- w count(*) it works fine as PG ignores the  inner tables
+SELECT count(*) FROM distributed LEFT JOIN local USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT count(*) FROM local LEFT JOIN distributed USING (id);
+ count
+---------------------------------------------------------------------
+   101
+(1 row)
+
+SELECT * FROM distributed LEFT JOIN local USING (id) LIMIT 1;
+ id | name |             created_at              | title
+---------------------------------------------------------------------
+  1 | 1    | Sat Dec 05 09:27:02.001893 2020 PST | 1
+(1 row)
+
+SELECT * FROM local LEFT JOIN distributed USING (id) LIMIT 1;
+ERROR:  cannot pushdown the subquery
+DETAIL:  Complex subqueries and CTEs cannot be in the outer part of the outer join
+ SELECT
+        foo1.id, random()
+    FROM
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo9,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo8,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo7,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo6,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo5,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo4,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo3,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo2,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo10,
+ (SELECT local.id, local.title FROM local, distributed WHERE local.id = distributed.id ) as foo1
+ WHERE
+  foo1.id =  foo9.id AND
+  foo1.id =  foo8.id AND
+  foo1.id =  foo7.id AND
+  foo1.id =  foo6.id AND
+  foo1.id =  foo5.id AND
+  foo1.id =  foo4.id AND
+  foo1.id =  foo3.id AND
+  foo1.id =  foo2.id AND
+  foo1.id =  foo10.id AND
+  foo1.id =  foo1.id  ;
+ id  |       random
+---------------------------------------------------------------------
+   2 |  0.721385073970438
+   9 |  0.322541553310341
+  11 |  0.960177688523025
+  12 |  0.355231459407353
+  18 |  0.252089157628063
+  22 |  0.109083132340043
+  23 |  0.919578742315515
+  27 |  0.601420012129712
+  29 |  0.611650596651387
+  30 |  0.340444916369787
+  32 |  0.295277368003717
+  41 | 0.0783703371986384
+  42 |  0.406558089497224
+  44 |  0.351596885565197
+  47 | 0.0428858489950201
+  58 |  0.808403489577092
+  59 |  0.853884746450703
+  67 |   0.94638019150349
+  68 |  0.712558952088521
+  69 |  0.110273078309579
+  72 |  0.207842815130675
+  75 |  0.358770542774817
+  76 |  0.316946774397003
+  78 |  0.223509769097848
+  80 |  0.313105102567434
+  81 |   0.16027444421081
+  90 |  0.126143955458467
+  95 |  0.595570703377636
+   1 |  0.151885055340621
+   5 |  0.841986787528345
+   8 |  0.910715716227244
+  10 |  0.371803844344125
+  15 |  0.108339975728136
+  20 |  0.355050880036291
+  24 |  0.761377617166062
+  25 |  0.396657665723193
+  26 |  0.151822764013509
+  31 | 0.0140065825763322
+  33 |  0.867743985522779
+  35 |  0.511508252145486
+  48 |  0.601036015770738
+  50 |  0.315659770786997
+  53 |  0.856373566522734
+  60 |   0.92934834777115
+  63 |  0.472241261898013
+  77 |  0.401229966908421
+  79 |  0.216918017810499
+  82 |  0.957838694728249
+  87 |  0.557490341488226
+  88 |  0.281130769868302
+  92 |  0.341464984345322
+  94 |  0.287201087188304
+   0 |  0.253862256491633
+   3 |  0.589337524216234
+   4 |  0.794989255390771
+   7 |  0.725663071520053
+  14 |  0.493233970743024
+  16 |  0.885733589338074
+  17 |  0.219060368966293
+  19 |  0.507643690611154
+  36 |  0.831520244966132
+  37 |  0.861323384638808
+  40 |  0.132788066660208
+  45 |  0.161328349097381
+  51 |  0.578704738132718
+  54 |  0.329123354566732
+  55 |  0.240882480380147
+  61 | 0.0740507179917742
+  64 |  0.147449811718449
+  65 | 0.0604282112726935
+  74 |  0.117142594637198
+  84 |  0.365015981549739
+  85 |  0.946111382591784
+  89 |   0.83186448125484
+  91 |  0.805836070416856
+  93 |   0.41386202052049
+  96 |  0.319641414114106
+  98 |   0.78117824544762
+   6 |   0.01744125926189
+  13 |  0.480042599645429
+  21 |  0.126400359133765
+  28 |    0.6321726489818
+  34 | 0.0314669329432782
+  38 |  0.727441339897709
+  39 |  0.774467811660397
+  43 |  0.826165913545616
+  46 |  0.553227102695846
+  49 |  0.756053219395881
+  52 |  0.205651631497215
+  56 |  0.576566896677811
+  57 |  0.453865900644349
+  62 |  0.949924410866757
+  66 |  0.418104153283817
+  70 |  0.350091381641157
+  71 |  0.251547218956436
+  73 |  0.575085021997012
+  83 |  0.760484905661496
+  86 |  0.583429905669171
+  97 |  0.752508331499843
+  99 |  0.510533515948779
+ 100 | 0.0566592026918009
+(101 rows)
+
+
+   SELECT
+        foo1.id
+    FROM
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo1,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo2,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo3,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo4,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id ) as foo5
+    WHERE
+        foo1.id = foo4.id AND
+        foo1.id = foo2.id AND
+        foo1.id = foo3.id AND
+        foo1.id = foo4.id AND
+        foo1.id = foo5.id;
+ id
+---------------------------------------------------------------------
+   0
+   3
+   4
+   7
+  14
+  16
+  17
+  19
+  36
+  37
+  40
+  45
+  51
+  54
+  55
+  61
+  64
+  65
+  74
+  84
+  85
+  89
+  91
+  93
+  96
+  98
+   1
+   5
+   8
+  10
+  15
+  20
+  24
+  25
+  26
+  31
+  33
+  35
+  48
+  50
+  53
+  60
+  63
+  77
+  79
+  82
+  87
+  88
+  92
+  94
+   6
+  13
+  21
+  28
+  34
+  38
+  39
+  43
+  46
+  49
+  52
+  56
+  57
+  62
+  66
+  70
+  71
+  73
+  83
+  86
+  97
+  99
+ 100
+   2
+   9
+  11
+  12
+  18
+  22
+  23
+  27
+  29
+  30
+  32
+  41
+  42
+  44
+  47
+  58
+  59
+  67
+  68
+  69
+  72
+  75
+  76
+  78
+  80
+  81
+  90
+  95
+(101 rows)
+
+   SELECT
+        foo1.id
+    FROM
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 1) as foo1,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 2) as foo2,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 3) as foo3,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 4) as foo4,
+        (SELECT local.id FROM distributed, local WHERE local.id = distributed.id  AND distributed.id = 5) as foo5
+    WHERE
+        foo1.id = foo4.id AND
+        foo1.id = foo2.id AND
+        foo1.id = foo3.id AND
+        foo1.id = foo4.id AND
+        foo1.id = foo5.id;
+ id
+---------------------------------------------------------------------
+(0 rows)
+
+DROP SCHEMA local_distributed_table_join CASCADE;
+NOTICE:  drop cascades to 7 other objects
+DETAIL:  drop cascades to table distributed
+drop cascades to table reference
+drop cascades to table local
+drop cascades to table unlogged_local
+drop cascades to materialized view mat_view
+drop cascades to view local_regular_view
+drop cascades to view dist_regular_view
