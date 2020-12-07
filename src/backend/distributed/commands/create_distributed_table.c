@@ -135,11 +135,15 @@ static void DoCopyFromLocalTableIntoShards(Relation distributedRelation,
 										   TupleTableSlot *slot,
 										   EState *estate);
 static void UndistributeTable(Oid relationId);
-static void AlterDistributedTable(Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, bool cascadeToColocated);
+static void AlterDistributedTable(Oid relationId, char *distributionColumn,
+								  int shardCount, char *colocateWithTableName,
+								  bool cascadeToColocated);
 static void AlterTableSetAccessMethod(Oid relationId, char *accessMethod);
 static List * GetViewCreationCommandsOfTable(Oid relationId);
 static void ReplaceTable(Oid sourceId, Oid targetId);
-static void ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, char *accessMethod, bool cascadeToColocated);
+static void ConvertTable(char conversionType, Oid relationId, char *distributionColumn,
+						 int shardCount, char *colocateWithTableName, char *accessMethod,
+						 bool cascadeToColocated);
 
 /* exports for SQL callable functions */
 PG_FUNCTION_INFO_V1(master_create_distributed_table);
@@ -325,7 +329,7 @@ Datum
 alter_distributed_table(PG_FUNCTION_ARGS)
 {
 	Oid relationId = PG_GETARG_OID(0);
-	
+
 	char *distributionColumn = NULL;
 	if (!PG_ARGISNULL(1))
 	{
@@ -349,7 +353,8 @@ alter_distributed_table(PG_FUNCTION_ARGS)
 	EnsureRelationExists(relationId);
 	EnsureTableOwner(relationId);
 
-	AlterDistributedTable(relationId, distributionColumn, shardCount, colocateWith, cascadeToColocated);
+	AlterDistributedTable(relationId, distributionColumn, shardCount, colocateWith,
+						  cascadeToColocated);
 
 	PG_RETURN_VOID();
 }
@@ -363,7 +368,7 @@ Datum
 alter_table_set_access_method(PG_FUNCTION_ARGS)
 {
 	Oid relationId = PG_GETARG_OID(0);
-	
+
 	text *accessMethodText = PG_GETARG_TEXT_P(1);
 	char *accessMethod = text_to_cstring(accessMethodText);
 
@@ -420,7 +425,8 @@ EnsureRelationExists(Oid relationId)
  * EnsureTableNotReferencing checks if the table has a reference to another
  * table and errors if it is.
  */
-void EnsureTableNotReferencing(Oid relationId)
+void
+EnsureTableNotReferencing(Oid relationId)
 {
 	if (TableReferencing(relationId))
 	{
@@ -434,7 +440,8 @@ void EnsureTableNotReferencing(Oid relationId)
  * EnsureTableNotReferenced checks if the table is referenced by another
  * table and errors if it is.
  */
-void EnsureTableNotReferenced(Oid relationId)
+void
+EnsureTableNotReferenced(Oid relationId)
 {
 	if (TableReferenced(relationId))
 	{
@@ -448,7 +455,8 @@ void EnsureTableNotReferenced(Oid relationId)
  * EnsureTableNotForeign checks if the table is a foreign table and errors
  * if it is.
  */
-void EnsureTableNotForeign(Oid relationId)
+void
+EnsureTableNotForeign(Oid relationId)
 {
 	char relationKind = get_rel_relkind(relationId);
 	if (relationKind == RELKIND_FOREIGN_TABLE)
@@ -463,7 +471,8 @@ void EnsureTableNotForeign(Oid relationId)
  * EnsureTableNotPartition checks if the table is a partition of another
  * table and errors if it is.
  */
-void EnsureTableNotPartition(Oid relationId)
+void
+EnsureTableNotPartition(Oid relationId)
 {
 	if (PartitionTable(relationId))
 	{
@@ -551,7 +560,8 @@ CreateDistributedTable(Oid relationId, Var *distributionColumn, char distributio
 	/* create shards for hash distributed and reference tables */
 	if (distributionMethod == DISTRIBUTE_BY_HASH)
 	{
-		CreateHashDistributedTableShards(relationId, shardCount, colocatedTableId, localTableEmpty);
+		CreateHashDistributedTableShards(relationId, shardCount, colocatedTableId,
+										 localTableEmpty);
 	}
 	else if (distributionMethod == DISTRIBUTE_BY_NONE)
 	{
@@ -1690,14 +1700,17 @@ DistributionColumnUsesGeneratedStoredColumn(TupleDesc relationDesc,
  * be dropped.
  */
 void
-ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, char *accessMethod, bool cascadeToColocated)
+ConvertTable(char conversionType, Oid relationId, char *distributionColumn,
+			 int shardCount, char *colocateWithTableName, char *accessMethod,
+			 bool cascadeToColocated)
 {
 	List *colocatedTableList = NIL;
 	if (cascadeToColocated)
 	{
 		colocatedTableList = ColocatedTableList(relationId);
 	}
-	List *preLoadCommands = GetPreLoadTableCreationCommands(relationId, true, accessMethod);
+	List *preLoadCommands = GetPreLoadTableCreationCommands(relationId, true,
+															accessMethod);
 	List *postLoadCommands = GetPostLoadTableCreationCommands(relationId);
 
 	postLoadCommands = list_concat(postLoadCommands,
@@ -1736,7 +1749,7 @@ ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int 
 			}
 			preLoadCommands = lappend(preLoadCommands,
 									  makeTableDDLCommandString(attachPartitionCommand));
-			
+
 			if (conversionType == UNDISTRIBUTE_TABLE)
 			{
 				UndistributeTable(partitionRelationId);
@@ -1785,7 +1798,9 @@ ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int 
 			distributionKey = DistPartitionKey(relationId);
 		}
 
-		CreateDistributedTable(get_relname_relid(tempName, schemaId), distributionKey, DISTRIBUTE_BY_HASH, shardCount, colocateWithTableName, false);
+		CreateDistributedTable(get_relname_relid(tempName, schemaId), distributionKey,
+							   DISTRIBUTE_BY_HASH, shardCount, colocateWithTableName,
+							   false);
 	}
 
 	ReplaceTable(relationId, get_relname_relid(tempName, schemaId));
@@ -1807,11 +1822,12 @@ ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int 
 	{
 		ereport(ERROR, (errmsg("could not finish SPI connection")));
 	}
-	
+
 	if (cascadeToColocated)
 	{
 		Oid colocatedTableId = InvalidOid;
-		// For now we only support cascade to colocation for alter_distributed_table UDF
+
+		/* For now we only support cascade to colocation for alter_distributed_table UDF */
 		Assert(conversionType == ALTER_DISTRIBUTED_TABLE);
 		foreach_oid(colocatedTableId, colocatedTableList)
 		{
@@ -1821,7 +1837,8 @@ ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int 
 			}
 			if (conversionType == ALTER_DISTRIBUTED_TABLE)
 			{
-				AlterDistributedTable(colocatedTableId, NULL, shardCount, relationName, false);
+				AlterDistributedTable(colocatedTableId, NULL, shardCount, relationName,
+									  false);
 			}
 		}
 	}
@@ -1831,7 +1848,7 @@ ConvertTable(char conversionType, Oid relationId, char *distributionColumn, int 
 /*
  * UndistributeTable undistributes the given table. It uses ConvertTable function to
  * create a new local table and move everything to that table.
- * 
+ *
  * The local tables, tables with references, partition tables and foreign tables are
  * not supported. The function gives errors in these cases.
  */
@@ -1865,12 +1882,13 @@ UndistributeTable(Oid relationId)
 /*
  * AlterDistributedTable changes some properties of the given table. It uses
  * ConvertTable function to create a new local table and move everything to that table.
- * 
+ *
  * The local and reference tables, tables with references, partition tables and foreign
  * tables are not supported. The function gives errors in these cases.
  */
 void
-AlterDistributedTable(Oid relationId, char *distributionColumn, int shardCount, char *colocateWithTableName, bool cascadeToColocated)
+AlterDistributedTable(Oid relationId, char *distributionColumn, int shardCount,
+					  char *colocateWithTableName, bool cascadeToColocated)
 {
 	Relation relation = try_relation_open(relationId, ExclusiveLock);
 
@@ -1892,7 +1910,8 @@ AlterDistributedTable(Oid relationId, char *distributionColumn, int shardCount, 
 	EnsureTableNotForeign(relationId);
 	EnsureTableNotPartition(relationId);
 
-	ConvertTable(ALTER_DISTRIBUTED_TABLE, relationId, distributionColumn, shardCount, colocateWithTableName, NULL, cascadeToColocated);
+	ConvertTable(ALTER_DISTRIBUTED_TABLE, relationId, distributionColumn, shardCount,
+				 colocateWithTableName, NULL, cascadeToColocated);
 }
 
 
@@ -1927,7 +1946,8 @@ AlterTableSetAccessMethod(Oid relationId, char *accessMethod)
 	EnsureTableNotForeign(relationId);
 	EnsureTableNotPartition(relationId);
 
-	ConvertTable(ALTER_TABLE_SET_ACCESS_METHOD, relationId, NULL, 0, NULL, accessMethod, false);
+	ConvertTable(ALTER_TABLE_SET_ACCESS_METHOD, relationId, NULL, 0, NULL, accessMethod,
+				 false);
 }
 
 
