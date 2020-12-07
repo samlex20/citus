@@ -103,9 +103,8 @@ static bool AllRangeTableEntriesHaveUniqueIndex(List *rangeTableEntryDetailsList
  */
 void
 RecursivelyPlanLocalTableJoins(Query *query,
-							   RecursivePlanningContext *context, List* rangeTableList)
+							   RecursivePlanningContext *context, List *rangeTableList)
 {
-
 	PlannerRestrictionContext *plannerRestrictionContext =
 		context->plannerRestrictionContext;
 
@@ -113,7 +112,7 @@ RecursivelyPlanLocalTableJoins(Query *query,
 	if (IsModifyCommand(query))
 	{
 		resultRelationId = ModifyQueryResultRelationId(query);
-	}		
+	}
 	ConversionCandidates *conversionCandidates =
 		CreateConversionCandidates(query->jointree, plannerRestrictionContext,
 								   rangeTableList, resultRelationId);
@@ -139,6 +138,7 @@ RecursivelyPlanLocalTableJoins(Query *query,
 		RemoveFromConversionCandidates(conversionCandidates, relId);
 	}
 }
+
 
 /*
  * GetNextRTEToConvertToSubquery returns the range table entry
@@ -241,7 +241,7 @@ ShouldConvertLocalTableJoinsToSubqueries(Query *query, List *rangeTableList,
 		return false;
 	}
 
-    if (!ContainsTableToBeConvertedToSubquery(rangeTableList))
+	if (!ContainsTableToBeConvertedToSubquery(rangeTableList))
 	{
 		return false;
 	}
@@ -251,7 +251,7 @@ ShouldConvertLocalTableJoinsToSubqueries(Query *query, List *rangeTableList,
 	if (IsRouterPlannable(query, plannerRestrictionContext))
 	{
 		ereport(DEBUG1, (errmsg("local-distributed table joins will not be converted, "
-						"as the query is router plannable")));
+								"as the query is router plannable")));
 		return false;
 	}
 	return true;

@@ -368,11 +368,13 @@ CitusBeginModifyScan(CustomScanState *node, EState *estate, int eflags)
 		RebuildQueryStrings(workerJob);
 	}
 
-	if (workerJob->onDummyPlacement) {
+	if (workerJob->onDummyPlacement)
+	{
 		/* if this job is on a dummy placement, then it doesn't operate on
-		   an actual shard placement */
+		 * an actual shard placement */
 		return;
 	}
+
 	/*
 	 * Now that we know the shard ID(s) we can acquire the necessary shard metadata
 	 * locks. Once we have the locks it's safe to load the placement metadata.

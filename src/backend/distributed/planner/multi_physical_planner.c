@@ -2113,9 +2113,10 @@ BuildJobTreeTaskList(Job *jobTree, PlannerRestrictionContext *plannerRestriction
 												   prunedRelationShardList, READ_TASK,
 												   false,
 												   &deferredErrorMessage);
-			if (deferredErrorMessage != NULL) {
+			if (deferredErrorMessage != NULL)
+			{
 				RaiseDeferredErrorInternal(deferredErrorMessage, ERROR);
-			}									   
+			}
 		}
 		else
 		{
@@ -2209,10 +2210,10 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 	if (list_length(relationRestrictionContext->relationRestrictionList) == 0)
 	{
 		*planningError = DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-						"cannot handle complex subqueries when the "
-						"router executor is disabled",
-						NULL, NULL);
-		return NIL;				
+									   "cannot handle complex subqueries when the "
+									   "router executor is disabled",
+									   NULL, NULL);
+		return NIL;
 	}
 
 	/* defaults to be used if this is a reference table-only query */
@@ -2238,9 +2239,9 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 		if (shardCount > 0 && shardCount != cacheEntry->shardIntervalArrayLength)
 		{
 			*planningError = DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-				"shard counts of co-located tables do not "
-				"match",
-				NULL, NULL);
+										   "shard counts of co-located tables do not "
+										   "match",
+										   NULL, NULL);
 			return NIL;
 		}
 
@@ -2306,9 +2307,10 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 													 taskType,
 													 modifyRequiresCoordinatorEvaluation,
 													 planningError);
-		if (*planningError != NULL) {
+		if (*planningError != NULL)
+		{
 			return NIL;
-		}											 
+		}
 		subqueryTask->jobId = jobId;
 		sqlTaskList = lappend(sqlTaskList, subqueryTask);
 
@@ -2565,11 +2567,11 @@ QueryPushdownTaskCreate(Query *originalQuery, int shardIndex,
 	if (list_length(taskPlacementList) == 0)
 	{
 		*planningError = DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-				"cannot find a worker that has active placements for all "
-				"shards in the query",
-				NULL, NULL);
+									   "cannot find a worker that has active placements for all "
+									   "shards in the query",
+									   NULL, NULL);
 
-		return NULL;					   
+		return NULL;
 	}
 
 	/*
