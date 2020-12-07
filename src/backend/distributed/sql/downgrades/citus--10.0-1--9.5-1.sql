@@ -8,3 +8,4 @@
 DROP VIEW public.citus_tables;
 
 DROP FUNCTION pg_catalog.alter_distributed_table(table_name regclass, distribution_column text DEFAULT NULL, shard_count int default NULL, colocate_with text DEFAULT 'default', cascade_to_colocated boolean DEFAULT NULL);
+DROP FUNCTION pg_catalog.alter_table_set_access_method(table_name regclass, access_method text);
