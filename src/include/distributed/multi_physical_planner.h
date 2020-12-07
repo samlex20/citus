@@ -163,7 +163,6 @@ typedef struct Job
 	 * query.
 	 */
 	bool parametersInJobQueryResolved;
-	bool onDummyPlacement;
 } Job;
 
 
@@ -329,6 +328,11 @@ typedef struct Task
 	 * ExplainTaskList().
 	 */
 	double fetchedExplainAnalyzeExecutionDuration;
+
+	/*
+	 * containsOnlyLocalTable is true if the task contains only postgres table/MV.
+	 */
+	bool containsOnlyLocalTable;
 } Task;
 
 
@@ -578,6 +582,8 @@ extern List * QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 									   List *prunedRelationShardList, TaskType taskType,
 									   bool modifyRequiresCoordinatorEvaluation,
 									   DeferredErrorMessage **planningError);
+
+extern bool OnlyLocalTableJob(Job *job);
 
 /* function declarations for managing jobs */
 extern uint64 UniqueJobId(void);

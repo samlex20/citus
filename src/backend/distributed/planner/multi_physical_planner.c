@@ -272,6 +272,27 @@ CreatePhysicalDistributedPlan(MultiTreeRoot *multiTree,
 
 
 /*
+ * OnlyLocalTableJob true if the given task contains
+ * only postgres tables
+ */
+bool
+OnlyLocalTableJob(Job *job)
+{
+	if (job == NULL)
+	{
+		return false;
+	}
+	List *taskList = job->taskList;
+	if (list_length(taskList) != 1)
+	{
+		return false;
+	}
+	Task *singleTask = (Task *) linitial(taskList);
+	return singleTask->containsOnlyLocalTable;
+}
+
+
+/*
  * BuildJobTree builds the physical job tree from the given logical plan tree.
  * The function walks over the logical plan from the bottom up, finds boundaries
  * for jobs, and creates the query structure for each job. The function also
@@ -5468,7 +5489,6 @@ ActiveShardPlacementLists(List *taskList)
 	{
 		Task *task = (Task *) lfirst(taskCell);
 		uint64 anchorShardId = task->anchorShardId;
-
 		List *shardPlacementList = ActiveShardPlacementList(anchorShardId);
 
 		/* filter out shard placements that reside in inactive nodes */
