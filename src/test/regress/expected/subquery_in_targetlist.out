@@ -137,8 +137,7 @@ SELECT (SELECT max(u1.time) FROM users_table u1 JOIN users_reference_table u2 US
 FROM events_reference_table e
 GROUP BY 1
 ORDER BY 1,2 LIMIT 1;
-ERROR:  cannot pushdown the subquery
-DETAIL:  Reference tables are not allowed in FROM clause when the query has subqueries in WHERE clause and it references a column from another query
+ERROR:  correlated subqueries are not supported when the FROM clause contains a reference table
 -- correlated subquery with non-co-located join in outer query
 SELECT event_type, (SELECT max(time) FROM users_table WHERE user_id = e.user_id GROUP BY user_id)
 FROM users_table u JOIN events_table e USING (value_2)
@@ -190,8 +189,7 @@ SELECT count(*), (SELECT max(time) FROM users_table WHERE user_id = cte_1.u GROU
 FROM cte_1
 GROUP BY 2
 ORDER BY 1,2 LIMIT 1;
-ERROR:  cannot pushdown the subquery
-DETAIL:  Complex subqueries and CTEs are not allowed in the FROM clause when the query has subqueries in the WHERE clause and it references a column from another query
+ERROR:  correlated subqueries are not supported when the FROM clause contains a CTE or subquery
 -- correlated subquery in an aggregate
 SELECT sum((SELECT max(value_3) FROM users_table WHERE user_id = e.user_id GROUP BY user_id))
 FROM events_table e;
@@ -270,23 +268,20 @@ SELECT (SELECT (SELECT e.user_id + user_id) FROM users_reference_table WHERE use
 FROM events_table e
 GROUP BY 1
 ORDER BY 1 LIMIT 3;
-ERROR:  cannot push down this subquery
-DETAIL:  Reference tables are not allowed in FROM clause when the query has subqueries in WHERE clause and it references a column from another query
+ERROR:  correlated subqueries are not supported when the FROM clause contains a reference table
 -- sublink in sublink with cte
 WITH cte_1 AS (SELECT user_id FROM users_table ORDER BY 1 LIMIT 1)
 SELECT (SELECT (SELECT e.user_id + user_id) FROM cte_1 WHERE user_id = e.user_id GROUP BY user_id)
 FROM events_table e
 GROUP BY 1
 ORDER BY 1 LIMIT 3;
-ERROR:  cannot push down this subquery
-DETAIL:  Complex subqueries and CTEs are not allowed in the FROM clause when the query has subqueries in the WHERE clause and it references a column from another query
+ERROR:  correlated subqueries are not supported when the FROM clause contains a CTE or subquery
 -- sublink in sublink with cte
 SELECT (SELECT (SELECT e.user_id + user_id) FROM (SELECT 1 AS user_id) s WHERE user_id = e.user_id GROUP BY user_id)
 FROM events_table e
 GROUP BY 1
 ORDER BY 1 LIMIT 3;
-ERROR:  cannot push down this subquery
-DETAIL:  Subqueries without FROM are not allowed in FROM clause when the outer query has subqueries in WHERE clause and it references a column from another query
+ERROR:  correlated subqueries are not supported when the FROM clause contains a subquery without FROM
 -- sublink with record type
 SELECT (SELECT u FROM users_table u WHERE u.user_id = e.user_id AND time = 'Thu Nov 23 09:26:42.145043 2017')
 FROM events_table e

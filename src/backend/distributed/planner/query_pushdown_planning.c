@@ -669,38 +669,28 @@ DeferErrorIfFromClauseRecurs(Query *queryTree)
 	if (recurType == RECURRING_TUPLES_REFERENCE_TABLE)
 	{
 		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "cannot pushdown the subquery",
-							 "Reference tables are not allowed in FROM "
-							 "clause when the query has subqueries in "
-							 "WHERE clause and it references a column "
-							 "from another query", NULL);
+							 "correlated subqueries are not supported when "
+							 "the FROM clause contains a reference table", NULL, NULL);
 	}
 	else if (recurType == RECURRING_TUPLES_FUNCTION)
 	{
 		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "cannot pushdown the subquery",
-							 "Functions are not allowed in FROM "
-							 "clause when the query has subqueries in "
-							 "WHERE clause and it references a column "
-							 "from another query", NULL);
+							 "correlated subqueries are not supported when "
+							 "the FROM clause contains a set returning function", NULL,
+							 NULL);
 	}
 	else if (recurType == RECURRING_TUPLES_RESULT_FUNCTION)
 	{
 		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "cannot pushdown the subquery",
-							 "Complex subqueries and CTEs are not allowed in "
-							 "the FROM clause when the query has subqueries in the "
-							 "WHERE clause and it references a column "
-							 "from another query", NULL);
+							 "correlated subqueries are not supported when "
+							 "the FROM clause contains a CTE or subquery", NULL, NULL);
 	}
 	else if (recurType == RECURRING_TUPLES_EMPTY_JOIN_TREE)
 	{
 		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "cannot pushdown the subquery",
-							 "Subqueries without FROM are not allowed in FROM "
-							 "clause when the outer query has subqueries in "
-							 "WHERE clause and it references a column "
-							 "from another query", NULL);
+							 "correlated subqueries are not supported when "
+							 "the FROM clause contains a subquery without FROM", NULL,
+							 NULL);
 	}
 
 	/*
@@ -1065,8 +1055,7 @@ DeferErrorIfCannotPushdownSubquery(Query *subqueryTree, bool outerMostQueryHasLi
 	deferredError = DeferErrorIfFromClauseRecurs(subqueryTree);
 	if (deferredError)
 	{
-		preconditionsSatisfied = false;
-		errorDetail = (char *) deferredError->detail;
+		return deferredError;
 	}
 
 
