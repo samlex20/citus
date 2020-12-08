@@ -24,6 +24,12 @@
 
 typedef struct RecursivePlanningContextInternal RecursivePlanningContext;
 
+typedef struct RangeTblEntryIndex
+{
+	RangeTblEntry *rangeTableEntry;
+	Index rteIndex;
+}RangeTblEntryIndex;
+
 extern PlannerRestrictionContext * GetPlannerRestrictionContext(
 	RecursivePlanningContext *recursivePlanningContext);
 extern List * GenerateSubplansForSubqueriesAndCTEs(uint64 planId, Query *originalQuery,

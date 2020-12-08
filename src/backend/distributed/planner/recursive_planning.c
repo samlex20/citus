@@ -1453,8 +1453,9 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry,
 								  RecursivePlanningContext *context)
 {
 	Query *subquery = WrapRteRelationIntoSubquery(rangeTableEntry, requiredAttrNumbers);
-	List *restrictionList = GetRestrictInfoListForRelation(
-		rangeTableEntry, context->plannerRestrictionContext);
+	List *restrictionList =
+		GetRestrictInfoListForRelation(rangeTableEntry,
+									   context->plannerRestrictionContext);
 	List *copyRestrictionList = copyObject(restrictionList);
 	Expr *andedBoundExpressions = make_ands_explicit(copyRestrictionList);
 	subquery->jointree->quals = (Node *) andedBoundExpressions;

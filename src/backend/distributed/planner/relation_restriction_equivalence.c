@@ -1856,15 +1856,16 @@ GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
 	}
 
 	RelOptInfo *relOptInfo = relationRestriction->relOptInfo;
-	List *baseRestrictInfo = relOptInfo->baserestrictinfo;
 	List *joinRestrictInfo = relOptInfo->joininfo;
+	List *baseRestrictInfo = relOptInfo->baserestrictinfo;
 
-	List *joinRrestrictClauseList = get_all_actual_clauses(joinRestrictInfo);
-	if (ContainsFalseClause(joinRrestrictClauseList))
+	List *joinRestrictClauseList = get_all_actual_clauses(joinRestrictInfo);
+	if (ContainsFalseClause(joinRestrictClauseList))
 	{
 		/* found WHERE false, no need  to continue */
-		return copyObject((List *) joinRrestrictClauseList);
+		return copyObject((List *) joinRestrictClauseList);
 	}
+
 
 	List *restrictExprList = NIL;
 	RestrictInfo *restrictInfo = NULL;

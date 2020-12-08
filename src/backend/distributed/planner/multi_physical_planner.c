@@ -234,9 +234,9 @@ static StringInfo ColumnTypeArrayString(List *targetEntryList);
 static bool CoPlacedShardIntervals(ShardInterval *firstInterval,
 								   ShardInterval *secondInterval);
 
-static List * FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr, Index rteIndex);
-static List * FetchEqualityAttrNumsForRTEBoolExpr(BoolExpr *boolExpr, Index rteIndex);
-
+static List * FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr);
+static List * FetchEqualityAttrNumsForRTEBoolExpr(BoolExpr *boolExpr);
+static List * FetchEqualityAttrNumsForList(List *nodeList);
 #if PG_VERSION_NUM >= PG_VERSION_13
 static List * GetColumnOriginalIndexes(Oid relationId);
 #endif
@@ -3638,26 +3638,58 @@ NodeIsRangeTblRefReferenceTable(Node *node, List *rangeTableList)
 
 
 /*
- * FetchEqualityAttrNumsForRTEFromQuals fetches the attribute numbers from quals
+ * FetchEqualityAttrNumsForRTE fetches the attribute numbers from quals
  * which:
  * - has equality operator
  * - belongs to rangeTableEntry with rteIndex
  */
 List *
-FetchEqualityAttrNumsForRTEFromQuals(Node *quals, Index rteIndex)
+FetchEqualityAttrNumsForRTE(Node *node)
 {
-	if (quals == NULL)
+	if (node == NULL)
 	{
 		return NIL;
 	}
-
-	if (IsA(quals, OpExpr))
+	if (IsA(node, List))
 	{
-		return FetchEqualityAttrNumsForRTEOpExpr((OpExpr *) quals, rteIndex);
+		return FetchEqualityAttrNumsForList((List *) node);
 	}
-	else if (IsA(quals, BoolExpr))
+	else if (IsA(node, OpExpr))
 	{
-		return FetchEqualityAttrNumsForRTEBoolExpr((BoolExpr *) quals, rteIndex);
+		return FetchEqualityAttrNumsForRTEOpExpr((OpExpr *) node);
+	}
+	else if (IsA(node, BoolExpr))
+	{
+		return FetchEqualityAttrNumsForRTEBoolExpr((BoolExpr *) node);
+	}
+	return NIL;
+}
+
+/*
+ * FetchEqualityAttrNumsForList fetches the constant equality numbers
+ * from the given node list.
+ */
+static List *FetchEqualityAttrNumsForList(List *nodeList)
+{
+	List *attributeNums = NIL;
+	Node *node = NULL;
+	bool hasAtLeastOneEquality = false;
+	foreach_ptr(node, nodeList)
+	{
+		List *fetchedEqualityAttrNums =
+			FetchEqualityAttrNumsForRTE(node);
+		hasAtLeastOneEquality |= list_length(fetchedEqualityAttrNums) > 0;
+		attributeNums = list_concat(attributeNums, fetchedEqualityAttrNums);
+	}
+
+	/* 
+	 * the given list is in the form of AND'ed expressions
+	 * hence if we have one equality then it is enough.
+	 * E.g: dist.a = 5 AND dist.a > 10
+	 */
+	if (hasAtLeastOneEquality)
+	{
+		return attributeNums;
 	}
 	return NIL;
 }
@@ -3670,7 +3702,7 @@ FetchEqualityAttrNumsForRTEFromQuals(Node *quals, Index rteIndex)
  * - belongs to rangeTableEntry with rteIndex
  */
 static List *
-FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr, Index rteIndex)
+FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr)
 {
 	if (!OperatorImplementsEquality(opExpr->opno))
 	{
@@ -3681,10 +3713,7 @@ FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr, Index rteIndex)
 	Var *var = NULL;
 	if (VarConstOpExprClause(opExpr, &var, NULL))
 	{
-		if (var->varno == rteIndex)
-		{
-			attributeNums = lappend_int(attributeNums, var->varattno);
-		}
+		attributeNums = lappend_int(attributeNums, var->varattno);
 	}
 	return attributeNums;
 }
@@ -3697,7 +3726,7 @@ FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr, Index rteIndex)
  * - belongs to rangeTableEntry with rteIndex
  */
 static List *
-FetchEqualityAttrNumsForRTEBoolExpr(BoolExpr *boolExpr, Index rteIndex)
+FetchEqualityAttrNumsForRTEBoolExpr(BoolExpr *boolExpr)
 {
 	if (boolExpr->boolop != AND_EXPR && boolExpr->boolop != OR_EXPR)
 	{
@@ -3709,8 +3738,7 @@ FetchEqualityAttrNumsForRTEBoolExpr(BoolExpr *boolExpr, Index rteIndex)
 	Node *arg = NULL;
 	foreach_ptr(arg, boolExpr->args)
 	{
-		List *attributeNumsInSubExpression = FetchEqualityAttrNumsForRTEFromQuals(arg,
-																				  rteIndex);
+		List *attributeNumsInSubExpression = FetchEqualityAttrNumsForRTE(arg);
 		if (boolExpr->boolop == AND_EXPR)
 		{
 			hasEquality |= list_length(attributeNumsInSubExpression) > 0;
