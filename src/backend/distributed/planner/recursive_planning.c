@@ -100,6 +100,20 @@
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 
+/*
+ * RecursivePlanningContext is used to recursively plan subqueries
+ * and CTEs, pull results to the coordinator, and push it back into
+ * the workers.
+ */
+struct RecursivePlanningContextInternal
+{
+	int level;
+	uint64 planId;
+	bool allDistributionKeysInQueryAreEqual; /* used for some optimizations */
+	List *subPlanList;
+	PlannerRestrictionContext *plannerRestrictionContext;
+};
+
 /* track depth of current recursive planner query */
 static int recursivePlanningDepth = 0;
 
@@ -159,7 +173,7 @@ static bool AllDistributionKeysInSubqueryAreEqual(Query *subquery,
 static bool IsTableLocallyAccessible(Oid relationId);
 static bool ShouldRecursivelyPlanSetOperation(Query *query,
 											  RecursivePlanningContext *context);
-static void RecursivelyPlanSubquery(Query *subquery,
+static bool RecursivelyPlanSubquery(Query *subquery,
 									RecursivePlanningContext *planningContext);
 static void RecursivelyPlanSetOperations(Query *query, Node *node,
 										 RecursivePlanningContext *context);
@@ -360,6 +374,17 @@ RecursivelyPlanSubqueriesAndCTEs(Query *query, RecursivePlanningContext *context
 
 
 	return NULL;
+}
+
+
+/*
+ * GetPlannerRestrictionContext returns the planner restriction context
+ * from the given context.
+ */
+PlannerRestrictionContext *
+GetPlannerRestrictionContext(RecursivePlanningContext *recursivePlanningContext)
+{
+	return recursivePlanningContext->plannerRestrictionContext;
 }
 
 
@@ -1179,7 +1204,7 @@ IsRelationLocalTableOrMatView(Oid relationId)
  * and immediately returns. Later, the planner decides on what to do
  * with the query.
  */
-static void
+static bool
 RecursivelyPlanSubquery(Query *subquery, RecursivePlanningContext *planningContext)
 {
 	uint64 planId = planningContext->planId;
@@ -1190,7 +1215,7 @@ RecursivelyPlanSubquery(Query *subquery, RecursivePlanningContext *planningConte
 		elog(DEBUG2, "skipping recursive planning for the subquery since it "
 					 "contains references to outer queries");
 
-		return;
+		return false;
 	}
 
 	/*
@@ -1233,6 +1258,7 @@ RecursivelyPlanSubquery(Query *subquery, RecursivePlanningContext *planningConte
 
 	/* finally update the input subquery to point the result query */
 	*subquery = *resultQuery;
+	return true;
 }
 
 
@@ -1422,11 +1448,13 @@ NodeContainsSubqueryReferencingOuterQuery(Node *node)
  * It then recursively plans the subquery.
  */
 void
-ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrictionList,
+ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry,
 								  List *requiredAttrNumbers,
 								  RecursivePlanningContext *context)
 {
 	Query *subquery = WrapRteRelationIntoSubquery(rangeTableEntry, requiredAttrNumbers);
+	List *restrictionList = GetRestrictInfoListForRelation(
+		rangeTableEntry, context->plannerRestrictionContext);
 	List *copyRestrictionList = copyObject(restrictionList);
 	Expr *andedBoundExpressions = make_ands_explicit(copyRestrictionList);
 	subquery->jointree->quals = (Node *) andedBoundExpressions;
@@ -1456,7 +1484,13 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry, List *restrict
 	}
 
 	/* as we created the subquery, now forcefully recursively plan it */
-	RecursivelyPlanSubquery(rangeTableEntry->subquery, context);
+	bool recursivellyPlanned = RecursivelyPlanSubquery(rangeTableEntry->subquery,
+													   context);
+	if (!recursivellyPlanned)
+	{
+		ereport(ERROR, (errmsg(
+							"unexpected state: query should have been recursively planned")));
+	}
 }
 
 
@@ -1734,7 +1768,6 @@ TransformFunctionRTE(RangeTblEntry *rangeTblEntry)
 			subquery->targetList = lappend(subquery->targetList, targetEntry);
 		}
 	}
-
 	/*
 	 * If tupleDesc is NULL we have 2 different cases:
 	 *
@@ -1784,7 +1817,6 @@ TransformFunctionRTE(RangeTblEntry *rangeTblEntry)
 				columnType = list_nth_oid(rangeTblFunction->funccoltypes,
 										  targetColumnIndex);
 			}
-
 			/* use the types in the function definition otherwise */
 			else
 			{

@@ -309,8 +309,8 @@ SELECT count(*) FROM distributed CROSS JOIN local WHERE distributed.id = 1;
 SELECT count(*) FROM distributed LEFT JOIN local USING (id);
 SELECT count(*) FROM local LEFT JOIN distributed USING (id);
 
-SELECT id, name FROM distributed LEFT JOIN local USING (id) LIMIT 1;
-SELECT id, name FROM local LEFT JOIN distributed USING (id) LIMIT 1;
+SELECT id, name FROM distributed LEFT JOIN local USING (id) ORDER BY 1 LIMIT 1;
+SELECT id, name FROM local LEFT JOIN distributed USING (id) ORDER BY 1 LIMIT 1;
 
  SELECT
         foo1.id
@@ -370,6 +370,35 @@ WHERE
 	foo1.id = foo5.id
 ORDER BY 1;
 
+SELECT
+	count(*)
+FROM
+ distributed
+JOIN LATERAL
+	(SELECT
+		*
+	FROM
+		local
+	JOIN
+		distributed d2
+	ON(true)
+		WHERE local.id = distributed.id AND d2.id = local.id) as foo
+ON (true);
 
+SELECT local.title, local.title FROM local JOIN distributed USING(id) ORDER BY 1,2 LIMIt 1;
+SELECT NULL FROM local JOIN distributed USING(id) ORDER BY 1 LIMIt 1;
+SELECT distributed.name, distributed.name,  local.title, local.title FROM local JOIN distributed USING(id) ORDER BY 1,2,3,4 LIMIT 1;
+SELECT
+	COUNT(*)
+FROM
+	local
+JOIN
+	distributed
+USING
+	(id)
+JOIN
+	(SELECT  id, NULL, NULL FROM distributed) foo
+USING
+	(id);
 
 DROP SCHEMA local_dist_join_mixed CASCADE;

@@ -3679,9 +3679,12 @@ FetchEqualityAttrNumsForRTEOpExpr(OpExpr *opExpr, Index rteIndex)
 
 	List *attributeNums = NIL;
 	Var *var = NULL;
-	if (VarConstOpExprClause(opExpr, &var, NULL) && var->varno == rteIndex)
+	if (VarConstOpExprClause(opExpr, &var, NULL))
 	{
-		attributeNums = lappend_int(attributeNums, var->varattno);
+		if (var->varno == rteIndex)
+		{
+			attributeNums = lappend_int(attributeNums, var->varattno);
+		}
 	}
 	return attributeNums;
 }

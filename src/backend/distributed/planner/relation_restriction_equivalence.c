@@ -1848,22 +1848,12 @@ List *
 GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
 							   PlannerRestrictionContext *plannerRestrictionContext)
 {
-	int rteIdentity = GetRTEIdentity(rangeTblEntry);
-	RelationRestrictionContext *relationRestrictionContext =
-		plannerRestrictionContext->relationRestrictionContext;
-	Relids queryRteIdentities = bms_make_singleton(rteIdentity);
-	RelationRestrictionContext *filteredRelationRestrictionContext =
-		FilterRelationRestrictionContext(relationRestrictionContext, queryRteIdentities);
-	List *filteredRelationRestrictionList =
-		filteredRelationRestrictionContext->relationRestrictionList;
-
-	if (list_length(filteredRelationRestrictionList) != 1)
+	RelationRestriction *relationRestriction =
+		RelationRestrictionForRelation(rangeTblEntry, plannerRestrictionContext);
+	if (relationRestriction == NULL)
 	{
 		return NIL;
 	}
-
-	RelationRestriction *relationRestriction =
-		(RelationRestriction *) linitial(filteredRelationRestrictionList);
 
 	RelOptInfo *relOptInfo = relationRestriction->relOptInfo;
 	List *baseRestrictInfo = relOptInfo->baserestrictinfo;
@@ -1916,6 +1906,34 @@ GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
 	}
 
 	return restrictExprList;
+}
+
+
+/*
+ * RelationRestrictionForRelation gets the relation restriction for the given
+ * range table entry.
+ */
+RelationRestriction *
+RelationRestrictionForRelation(RangeTblEntry *rangeTableEntry,
+							   PlannerRestrictionContext *plannerRestrictionContext)
+{
+	int rteIdentity = GetRTEIdentity(rangeTableEntry);
+	RelationRestrictionContext *relationRestrictionContext =
+		plannerRestrictionContext->relationRestrictionContext;
+	Relids queryRteIdentities = bms_make_singleton(rteIdentity);
+	RelationRestrictionContext *filteredRelationRestrictionContext =
+		FilterRelationRestrictionContext(relationRestrictionContext, queryRteIdentities);
+	List *filteredRelationRestrictionList =
+		filteredRelationRestrictionContext->relationRestrictionList;
+
+	if (list_length(filteredRelationRestrictionList) != 1)
+	{
+		return NULL;
+	}
+
+	RelationRestriction *relationRestriction =
+		(RelationRestriction *) linitial(filteredRelationRestrictionList);
+	return relationRestriction;
 }
 
 
