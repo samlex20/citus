@@ -321,8 +321,6 @@ IsRouterPlannable(Query *query, PlannerRestrictionContext *plannerRestrictionCon
 		}
 	}
 
-	/* TODO:: we might not need this copy*/
-	copyQuery = copyObject(query);
 	RouterJob(copyQuery, plannerRestrictionContext, &deferredErrorMessage);
 	return deferredErrorMessage == NULL;
 }
@@ -1044,7 +1042,8 @@ DeferErrorIfModifyView(Query *queryTree)
 			firstRangeTableElement->inFromCl == false)
 		{
 			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-								 "cannot modify views over distributed tables", NULL,
+								 "cannot modify views when the query contains citus tables",
+								 NULL,
 								 NULL);
 		}
 	}

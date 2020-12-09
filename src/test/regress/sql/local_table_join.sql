@@ -209,6 +209,8 @@ FROM
 WHERE
 	d1.key = 1;
 
+CREATE view loc_view AS SELECT * FROM postgres_table WHERE key > 0;
+UPDATE loc_view SET key = (SELECT COUNT(*) FROM distributed_table);
 
 SELECT count(*)
 FROM
