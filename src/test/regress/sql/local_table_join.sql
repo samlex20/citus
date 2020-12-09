@@ -136,6 +136,7 @@ SELECT count(*) FROM distributed_table_composite JOIN postgres_table USING(key)
 SELECT count(*) FROM distributed_table_composite JOIN postgres_table USING(key)
 	WHERE (distributed_table_composite.key > 10 AND distributed_table_composite.key = 20)
 	OR (distributed_table_composite.value = 'text' AND distributed_table_composite.value = 'text');
+
 -- a unique index on key so dist table should be recursively planned
 SELECT count(*) FROM postgres_table JOIN distributed_table_pkey USING(key);
 SELECT count(*) FROM postgres_table JOIN distributed_table_pkey USING(value);

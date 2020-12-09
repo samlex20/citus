@@ -173,7 +173,7 @@ GetNextRTEToConvertToSubquery(ConversionCandidates *conversionCandidates,
 	{
 		/*
 		 * We want to convert distributed tables only if all the distributed tables
-		 * have a constant filter on a unique index, otherwise we would be redundantly 
+		 * have a constant filter on a unique index, otherwise we would be redundantly
 		 * converting a distributed table as we will convert all the other local tables.
 		 */
 		bool allRangeTableEntriesHaveUniqueIndex = AllRangeTableEntriesHaveUniqueIndex(
