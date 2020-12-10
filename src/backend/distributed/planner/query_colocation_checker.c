@@ -306,6 +306,11 @@ WrapRteRelationIntoSubquery(RangeTblEntry *rteRelation, List *requiredAttributes
 
 		if (!list_member_int(requiredAttributes, attributeNumber))
 		{
+			/*
+			 * We add a null target entry because we don't have an easy
+			 * way of changing all the references to this column and
+			 * we don't want to break postgres query.
+			 */
 			targetEntry->expr =
 				(Expr *) makeNullConst(attributeTuple->atttypid,
 									   attributeTuple->atttypmod,

@@ -1492,8 +1492,8 @@ ReplaceRTERelationWithRteSubquery(RangeTblEntry *rangeTableEntry,
 	}
 
 	/* as we created the subquery, now forcefully recursively plan it */
-	bool recursivellyPlanned = RecursivelyPlanSubquery(subquery, context);
-	if (!recursivellyPlanned)
+	bool recursivelyPlanned = RecursivelyPlanSubquery(subquery, context);
+	if (!recursivelyPlanned)
 	{
 		ereport(ERROR, (errmsg(
 							"unexpected state: query should have been recursively planned")));
